@@ -10,6 +10,8 @@
 #include <netdb.h>
 
 #include <time.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 #define LONGDADES	78
 
@@ -111,11 +113,27 @@ int alive(){
   return 0;
 }
 
-
 int main(int argc,char *argv[])
 {
-  /* Carregem les dades de client.cfg a les variables corresponents */
-  leerConfig("client.cfg");
+  /* Mirem les opcions introduides en la comanda */
+  int opt;
+  char *fichero = "client.cfg";
+  while((opt = getopt(argc, argv, ":c:d:")) != -1)
+      {
+          switch(opt)
+          {
+              case 'c':
+                  fichero = optarg;
+                  break;
+              case 'd':
+                  printf("filename: %s\n", optarg);
+                  break;
+          }
+      }
+
+  /* Carregem les dades del archiu .cfg a les variables corresponents */
+  printf("%s\n", fichero);
+  leerConfig(fichero);
 
 	/* Crea un socket INET+DGRAM -> UDP */
 	sock=socket(AF_INET,SOCK_DGRAM,0);
@@ -160,29 +178,33 @@ int main(int argc,char *argv[])
     ptr_ts = gmtime(&raw_time);
     strcpy(estat,"REGISTERED");
     printf("%2d:%02d:%02d: MSG.  =>  Equip passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
-  } else if(reg == -1){
-    /*sleep(5);
-    goto regis;*/
+    printf("Equip: %s\n", pdu->nomEquip);
   }
 
+/*
   /* crear hijo */
-  /*/pid_t pid = fork();
+  /*
+  pid_t pid = fork();
   if(pid) {
     // pare
-    for(int a = 0; a < 10; a++) {
-      printf("PARE\n");
+    pid_t pid2 = fork();
+    if(pid2) {
+      //pare
+      pid_t pidFinal = wait(NULL);
+      if(pidFinal == pid) kill(pid2, SIGTERM);
+      else kill(pid, SIGTERM);
+    } else {
+      // Fill 2
+      for(int i = 0; i < 5; i++) sleep(1);
+      exit(0);
+    }
+
+  } else {
+    // Fill 1
+    while(1) {
+      printf("FILL 1\n");
       sleep(1);
     }
-  } else {
-    // Fill
-    int al = alive();
+  }*/
 
-    if(al == 0){
-      goto regis;
-    }*/
-
-
-    /* TEST GIT */
-
-    
   }
