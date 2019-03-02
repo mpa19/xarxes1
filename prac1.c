@@ -29,11 +29,12 @@ struct tm *ptr_ts;
 
 char dadcli[LONGDADES];
 struct hostent *ent;
-int sock,port,laddr_cli,a;
+int sock,port,laddr_cli,a, portTCP;
 struct PDU *pdu;
 struct PDU *recib;
 struct PDU prot;
 struct PDU prot2;
+struct PDU *server;
 struct sockaddr_in	addr_server,addr_cli;
 char estat[15];
 
@@ -106,11 +107,24 @@ void leerConfig(char* a) {
 }
 
 int alive(){
-  for(int a = 0; a < 5; a++) {
-    printf("ALIVE!!\n");
-    sleep(1);
-  }
-  return 0;
+  pdu->tipusPaq[0] = 0x10;
+  printf("T: %x\n", pdu->tipusPaq[0]);
+  printf("N: %s\n", pdu->nomEquip);
+  printf("M: %s\n", pdu->MAC);
+  printf("Nu: %s\n", pdu->numAleatori);
+  printf("D: %s\n", pdu->dades);
+  a=sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
+  recvfrom(sock,recib,LONGDADES,0,(struct sockaddr *)0,(int *)0);
+  printf("T: %x\n", recib->tipusPaq[0]);
+  printf("N: %s\n", recib->nomEquip);
+  printf("M: %s\n", recib->MAC);
+  printf("Nu: %s\n", recib->numAleatori);
+  printf("D: %s\n", recib->dades);
+
+  if(strcmp(recib->nomEquip, server->nomEquip) == 0 &&
+      strcmp(recib->MAC, server->MAC) == 0 &&
+      strcmp(recib->numAleatori, server->numAleatori) == 0) return 1;
+  else return 0;
 }
 
 int main(int argc,char *argv[])
@@ -178,7 +192,12 @@ int main(int argc,char *argv[])
     ptr_ts = gmtime(&raw_time);
     strcpy(estat,"REGISTERED");
     printf("%2d:%02d:%02d: MSG.  =>  Equip passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
-    printf("Equip: %s\n", pdu->nomEquip);
+    strcpy(pdu->numAleatori, recib->numAleatori);
+    portTCP = atoi(recib->dades);
+    server = recib;
+    int ret = alive();
+    if(ret == 1) printf("SERVER OK\n");
+    else printf("ERROR SERVER\n");
   }
 
 /*
