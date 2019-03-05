@@ -31,17 +31,23 @@ struct tm *ptr_ts;
 
 char dadcli[LONGDADES];
 struct hostent *ent;
-int sock,port,laddr_cli,a, portTCP;
+int sock,port,laddr_cli,a, portTCP, procesos = 1;
 struct PDU *pdu;
 struct PDU *recib;
 struct PDU prot;
 struct PDU prot2;
 struct PDU *server;
 struct sockaddr_in	addr_server,addr_cli;
+bool debug = false;
 
-void mostraMSG(char estat[], char qui[]){
+
+void hora(){
   time (&raw_time);
   ptr_ts = gmtime(&raw_time);
+}
+
+void mostraMSG(char estat[], char qui[]){
+  hora();
   printf("%2d:%02d:%02d: MSG.  =>  %s passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, qui, estat);
 }
 
@@ -55,7 +61,12 @@ int registrar(){
   pdu = &prot;
   recib = &prot2;
 
-  for(int procesos = 0; procesos < 3; procesos++){
+  while(procesos < 4){
+    if(debug) {
+      hora();
+      printf("%2d:%02d:%02d: DEBUG =>  Registre equip, intent: %i\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, procesos);
+    }
+
     temps = 2;
     tv.tv_sec = temps;
     tv.tv_usec = 0;
@@ -65,21 +76,31 @@ int registrar(){
       tv.tv_sec = temps;
       FD_ZERO(&fdread);
       FD_SET(sock, &fdread);
-
-      sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
+      
+      if(debug) {
+        hora();
+        printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=REGISTER_REQ, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), pdu->nomEquip, pdu->MAC, pdu->numAleatori, pdu->dades);
+      }
+      sendto(sock,pdu,sizeof(struct PDU),0,(struct sockaddr*)&addr_server,sizeof(addr_server));
       mostraMSG("WAIT_REG","Client");
       select_return = select(sock+1,&fdread, NULL, NULL, &tv);
 
       if(select_return < 0){
         return -1;
       } else if(select_return) {
-        recvfrom(sock,recib,LONGDADES,0,(struct sockaddr *)0,(int *)0);
+        recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
         if(recib->tipusPaq[0] == 0x01) return 1;
         else if (recib->tipusPaq[0] == 0x03) return 0;
         else break;
       }
     }
+
+    if(debug) {
+      hora();
+      printf("%2d:%02d:%02d: INFO  =>  Fallida registre amb servidor: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, ent->h_name);
+    }
     sleep(5);
+    procesos++;
   }
   return 0;
 }
@@ -122,11 +143,11 @@ int alive(){
   while(1){
     tv.tv_sec = 3;
 
-    sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
+    sendto(sock,pdu,sizeof(struct PDU),0,(struct sockaddr*)&addr_server,sizeof(addr_server));
     select_return = select(sock+1,&fdread, NULL, NULL, &tv);
 
     if(select_return) {
-      recvfrom(sock,recib,LONGDADES,0,(struct sockaddr *)0,(int *)0);
+      recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
       if(recib->tipusPaq[0] == 0x11){
         if(strcmp(recib->nomEquip, server->nomEquip) == 0 &&
             strcmp(recib->MAC, server->MAC) == 0 &&
@@ -150,7 +171,7 @@ int main(int argc,char *argv[])
   /* Mirem les opcions introduides en la comanda */
   int opt;
   char *fichero = "client.cfg";
-  while((opt = getopt(argc, argv, ":c:d:")) != -1)
+  while((opt = getopt(argc, argv, ":c:d")) != -1)
       {
           switch(opt)
           {
@@ -158,7 +179,7 @@ int main(int argc,char *argv[])
                   fichero = optarg;
                   break;
               case 'd':
-                  printf("filename: %s\n", optarg);
+                  debug = true;
                   break;
           }
       }
@@ -207,38 +228,33 @@ int main(int argc,char *argv[])
     portTCP = atoi(recib->dades);
     server = recib;
     pdu->tipusPaq[0] = 0x10;
-    int ret = alive();
-    if(ret == 0) {
-      mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)", "Equip");
-      goto regis;
-    }
-  }
+    pid_t pid = fork();
+    if(pid) {
+      // pare
+      pid_t pid2 = fork();
 
+      if(pid2) {
+        // Pare, Controla el fills
+        pid_t pidFinal = wait(NULL);
+        if(pidFinal == pid) {
+          kill(pid2, SIGTERM);
+          goto regis;
+        }
+        else kill(pid, SIGTERM);
+      } else {
+        // Fill 2, Controla la entrada de comandes per consola
+        char *escan;
+        scanf("%s",escan);
+        if(strcmp(escan, "quit")) exit(0);
+      }
 
-/*
-  /* crear hijo */
-  /*
-  pid_t pid = fork();
-  if(pid) {
-    // pare
-    pid_t pid2 = fork();
-    if(pid2) {
-      //pare
-      pid_t pidFinal = wait(NULL);
-      if(pidFinal == pid) kill(pid2, SIGTERM);
-      else kill(pid, SIGTERM);
     } else {
-      // Fill 2
-      for(int i = 0; i < 5; i++) sleep(1);
-      exit(0);
+      // Fill 1 Mante ALIVE
+      int ret = alive();
+      if(ret == 0) {
+        mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)", "Equip");
+        exit(0);
+      }
     }
-
-  } else {
-    // Fill 1
-    while(1) {
-      printf("FILL 1\n");
-      sleep(1);
-    }
-  }*/
-
   }
+}
