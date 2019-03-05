@@ -39,10 +39,10 @@ struct PDU prot2;
 struct PDU *server;
 struct sockaddr_in	addr_server,addr_cli;
 
-void mostraMSG(char estat[]){
+void mostraMSG(char estat[], char qui[]){
   time (&raw_time);
   ptr_ts = gmtime(&raw_time);
-  printf("%2d:%02d:%02d: MSG.  =>  Equip passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
+  printf("%2d:%02d:%02d: MSG.  =>  %s passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, qui, estat);
 }
 
 int registrar(){
@@ -65,9 +65,9 @@ int registrar(){
       tv.tv_sec = temps;
       FD_ZERO(&fdread);
       FD_SET(sock, &fdread);
-      
+
       sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
-      mostraMSG("WAIT_REG");
+      mostraMSG("WAIT_REG","Client");
       select_return = select(sock+1,&fdread, NULL, NULL, &tv);
 
       if(select_return < 0){
@@ -132,7 +132,7 @@ int alive(){
             strcmp(recib->MAC, server->MAC) == 0 &&
             strcmp(recib->numAleatori, server->numAleatori) == 0){
               if(!alive) {
-                mostraMSG("ALIVE");
+                mostraMSG("ALIVE", "Equip");
                 alive = true;
               }
             } else perduts++;
@@ -164,7 +164,6 @@ int main(int argc,char *argv[])
       }
 
   /* Carregem les dades del archiu .cfg a les variables corresponents */
-  printf("%s\n", fichero);
   leerConfig(fichero);
 
 	/* Crea un socket INET+DGRAM -> UDP */
@@ -197,20 +196,20 @@ int main(int argc,char *argv[])
 	addr_server.sin_port=htons(port);
 
   int reg;
-  mostraMSG("DISCONNECTED");
+  mostraMSG("DISCONNECTED", "Equip");
 
   regis:
   reg = registrar();
 
   if(reg == 1){
-    mostraMSG("REGISTERED");
+    mostraMSG("REGISTERED", "Equip");
     strcpy(pdu->numAleatori, recib->numAleatori);
     portTCP = atoi(recib->dades);
     server = recib;
     pdu->tipusPaq[0] = 0x10;
     int ret = alive();
     if(ret == 0) {
-      mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)");
+      mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)", "Equip");
       goto regis;
     }
   }
