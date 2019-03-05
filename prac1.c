@@ -13,6 +13,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+#include <stdbool.h>
+
 #define LONGDADES	78
 
 
@@ -36,7 +38,12 @@ struct PDU prot;
 struct PDU prot2;
 struct PDU *server;
 struct sockaddr_in	addr_server,addr_cli;
-char estat[15];
+
+void mostraMSG(char estat[]){
+  time (&raw_time);
+  ptr_ts = gmtime(&raw_time);
+  printf("%2d:%02d:%02d: MSG.  =>  Equip passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
+}
 
 int registrar(){
   struct timeval tv;
@@ -58,13 +65,9 @@ int registrar(){
       tv.tv_sec = temps;
       FD_ZERO(&fdread);
       FD_SET(sock, &fdread);
-      a=sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
-
-      time (&raw_time);
-      ptr_ts = gmtime(&raw_time);
-
-      strcpy(estat,"WAIT_REG");
-      printf("%2d:%02d:%02d: MSG.  =>  Client passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
+      
+      sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
+      mostraMSG("WAIT_REG");
       select_return = select(sock+1,&fdread, NULL, NULL, &tv);
 
       if(select_return < 0){
@@ -107,24 +110,39 @@ void leerConfig(char* a) {
 }
 
 int alive(){
-  pdu->tipusPaq[0] = 0x10;
-  printf("T: %x\n", pdu->tipusPaq[0]);
-  printf("N: %s\n", pdu->nomEquip);
-  printf("M: %s\n", pdu->MAC);
-  printf("Nu: %s\n", pdu->numAleatori);
-  printf("D: %s\n", pdu->dades);
-  a=sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
-  recvfrom(sock,recib,LONGDADES,0,(struct sockaddr *)0,(int *)0);
-  printf("T: %x\n", recib->tipusPaq[0]);
-  printf("N: %s\n", recib->nomEquip);
-  printf("M: %s\n", recib->MAC);
-  printf("Nu: %s\n", recib->numAleatori);
-  printf("D: %s\n", recib->dades);
+  struct timeval tv;
+  int select_return, perduts = 0;
+  fd_set fdread;
+  bool alive = false;
 
-  if(strcmp(recib->nomEquip, server->nomEquip) == 0 &&
-      strcmp(recib->MAC, server->MAC) == 0 &&
-      strcmp(recib->numAleatori, server->numAleatori) == 0) return 1;
-  else return 0;
+  FD_ZERO(&fdread);
+  FD_SET(sock, &fdread);
+  tv.tv_usec = 0;
+
+  while(1){
+    tv.tv_sec = 3;
+
+    sendto(sock,pdu,LONGDADES,0,(struct sockaddr*)&addr_server,sizeof(addr_server));
+    select_return = select(sock+1,&fdread, NULL, NULL, &tv);
+
+    if(select_return) {
+      recvfrom(sock,recib,LONGDADES,0,(struct sockaddr *)0,(int *)0);
+      if(recib->tipusPaq[0] == 0x11){
+        if(strcmp(recib->nomEquip, server->nomEquip) == 0 &&
+            strcmp(recib->MAC, server->MAC) == 0 &&
+            strcmp(recib->numAleatori, server->numAleatori) == 0){
+              if(!alive) {
+                mostraMSG("ALIVE");
+                alive = true;
+              }
+            } else perduts++;
+      } else if(recib->tipusPaq[0] == 0x13){
+        return 0;
+      } else perduts++;
+    } else perduts++;
+    if(perduts == 3) return 0;
+    sleep(tv.tv_sec);
+  }
 }
 
 int main(int argc,char *argv[])
@@ -179,26 +197,24 @@ int main(int argc,char *argv[])
 	addr_server.sin_port=htons(port);
 
   int reg;
-  time (&raw_time);
-  ptr_ts = gmtime(&raw_time);
-  strcpy(estat,"DISCONNECTED");
-  printf("%2d:%02d:%02d: MSG.  =>  Equip passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
+  mostraMSG("DISCONNECTED");
 
   regis:
   reg = registrar();
 
   if(reg == 1){
-    time (&raw_time);
-    ptr_ts = gmtime(&raw_time);
-    strcpy(estat,"REGISTERED");
-    printf("%2d:%02d:%02d: MSG.  =>  Equip passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, estat);
+    mostraMSG("REGISTERED");
     strcpy(pdu->numAleatori, recib->numAleatori);
     portTCP = atoi(recib->dades);
     server = recib;
+    pdu->tipusPaq[0] = 0x10;
     int ret = alive();
-    if(ret == 1) printf("SERVER OK\n");
-    else printf("ERROR SERVER\n");
+    if(ret == 0) {
+      mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)");
+      goto regis;
+    }
   }
+
 
 /*
   /* crear hijo */
