@@ -51,6 +51,17 @@ void mostraMSG(char estat[], char qui[]){
   printf("%2d:%02d:%02d: MSG.  =>  %s passa a l'estat: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, qui, estat);
 }
 
+char* tPaquet(struct PDU *pdu){
+  if(pdu->tipusPaq[0] == 0x00) return "REGISTER_REQ";
+  else if(pdu->tipusPaq[0] == 0x01) return "REGISTER_ACK";
+  else if(pdu->tipusPaq[0] == 0x02) return "REGISTER_NACK";
+  else if(pdu->tipusPaq[0] == 0x03) return "REGISTER_REJ";
+  else if(pdu->tipusPaq[0] == 0x10) return "ALIVE_INF";
+  else if(pdu->tipusPaq[0] == 0x11) return "ALIVE_ACK";
+  else if(pdu->tipusPaq[0] == 0x12) return "ALIVE_NACK";
+  else if(pdu->tipusPaq[0] == 0x13) return "ALIVE_REJ";
+}
+
 int registrar(){
   struct timeval tv;
   int select_return, temps;
@@ -76,10 +87,10 @@ int registrar(){
       tv.tv_sec = temps;
       FD_ZERO(&fdread);
       FD_SET(sock, &fdread);
-      
+
       if(debug) {
         hora();
-        printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=REGISTER_REQ, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), pdu->nomEquip, pdu->MAC, pdu->numAleatori, pdu->dades);
+        printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), tPaquet(pdu), pdu->nomEquip, pdu->MAC, pdu->numAleatori, pdu->dades);
       }
       sendto(sock,pdu,sizeof(struct PDU),0,(struct sockaddr*)&addr_server,sizeof(addr_server));
       mostraMSG("WAIT_REG","Client");
@@ -89,9 +100,24 @@ int registrar(){
         return -1;
       } else if(select_return) {
         recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
+        if(debug){
+          hora();
+          printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), tPaquet(recib), recib->nomEquip, recib->MAC, recib->numAleatori, recib->dades);
+        }
         if(recib->tipusPaq[0] == 0x01) return 1;
-        else if (recib->tipusPaq[0] == 0x03) return 0;
-        else break;
+        else if (recib->tipusPaq[0] == 0x03) {
+          if(debug){
+            hora();
+            printf("%2d:%02d:%02d: INFO =>  Petició de registre rebutjada, motiu: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, recib->dades);
+          }
+          return 0;
+        } else {
+          if(debug){
+            hora();
+            printf("%2d:%02d:%02d: INFO =>  Petició de registre errònia, motiu: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, recib->dades);
+          }
+          break;
+        }
       }
     }
 
@@ -140,14 +166,27 @@ int alive(){
   FD_SET(sock, &fdread);
   tv.tv_usec = 0;
 
+  if(debug){
+    hora();
+    printf("%2d:%02d:%02d: DEBUG =>  Establert temporitzador per enviament alives\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+  }
+
   while(1){
     tv.tv_sec = 3;
-
+    if(debug) {
+      hora();
+      printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), tPaquet(pdu), pdu->nomEquip, pdu->MAC, pdu->numAleatori, pdu->dades);
+    }
     sendto(sock,pdu,sizeof(struct PDU),0,(struct sockaddr*)&addr_server,sizeof(addr_server));
     select_return = select(sock+1,&fdread, NULL, NULL, &tv);
 
     if(select_return) {
       recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
+      if(debug){
+        hora();
+        printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU),tPaquet(recib), recib->nomEquip, recib->MAC, recib->numAleatori, recib->dades);
+      }
+
       if(recib->tipusPaq[0] == 0x11){
         if(strcmp(recib->nomEquip, server->nomEquip) == 0 &&
             strcmp(recib->MAC, server->MAC) == 0 &&
@@ -158,10 +197,20 @@ int alive(){
               }
             } else perduts++;
       } else if(recib->tipusPaq[0] == 0x13){
+        if(debug){
+          hora();
+          printf("%2d:%02d:%02d: INFO =>  Recepció d'informació de alive rebutjada, motiu: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, recib->dades);
+        }
         return 0;
       } else perduts++;
     } else perduts++;
-    if(perduts == 3) return 0;
+    if(perduts == 3) {
+      if(debug){
+        hora();
+        printf("%2d:%02d:%02d: DEBUG =>  Cancelat temporitzador per enviament alives\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+      }
+      return 0;
+    }
     sleep(tv.tv_sec);
   }
 }
@@ -224,6 +273,11 @@ int main(int argc,char *argv[])
 
   if(reg == 1){
     mostraMSG("REGISTERED", "Equip");
+    if(debug){
+      hora();
+      printf("%2d:%02d:%02d: INFO  =>  Acceptada subscripció amb servidor: %s (nom: %s, mac: %s, alea: %s, port tcp: %s)\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,
+          ent->h_name, recib->nomEquip, recib-> MAC, recib->numAleatori, recib->dades);
+    }
     strcpy(pdu->numAleatori, recib->numAleatori);
     portTCP = atoi(recib->dades);
     server = recib;
@@ -250,6 +304,10 @@ int main(int argc,char *argv[])
 
     } else {
       // Fill 1 Mante ALIVE
+      if(debug){
+        hora();
+        printf("%2d:%02d:%02d: DEBUG =>  Creat procés per gestionar alives\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+      }
       int ret = alive();
       if(ret == 0) {
         mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)", "Equip");
