@@ -36,9 +36,9 @@ struct PDU *pdu;
 struct PDU *recib;
 struct PDU prot;
 struct PDU prot2;
-struct PDU *server;
 struct sockaddr_in	addr_server,addr_cli;
 bool debug = false;
+char numAlServer[7], nomSever[7], macServer[13];
 
 
 void hora(){
@@ -67,7 +67,7 @@ int registrar(){
   int select_return, temps;
   fd_set fdread;
 
-  strcpy(prot.numAleatori, "000000");
+
   prot.tipusPaq[0] = 0x00;
   pdu = &prot;
   recib = &prot2;
@@ -104,8 +104,10 @@ int registrar(){
           hora();
           printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), tPaquet(recib), recib->nomEquip, recib->MAC, recib->numAleatori, recib->dades);
         }
-        if(recib->tipusPaq[0] == 0x01) return 1;
-        else if (recib->tipusPaq[0] == 0x03) {
+        if(recib->tipusPaq[0] == 0x01) {
+          procesos++;
+          return 1;
+        } else if (recib->tipusPaq[0] == 0x03) {
           if(debug){
             hora();
             printf("%2d:%02d:%02d: INFO =>  Petició de registre rebutjada, motiu: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, recib->dades);
@@ -162,8 +164,7 @@ int alive(){
   fd_set fdread;
   bool alive = false;
 
-  FD_ZERO(&fdread);
-  FD_SET(sock, &fdread);
+
   tv.tv_usec = 0;
 
   if(debug){
@@ -173,13 +174,14 @@ int alive(){
 
   while(1){
     tv.tv_sec = 3;
+    FD_ZERO(&fdread);
+    FD_SET(sock, &fdread);
     if(debug) {
       hora();
       printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), tPaquet(pdu), pdu->nomEquip, pdu->MAC, pdu->numAleatori, pdu->dades);
     }
     sendto(sock,pdu,sizeof(struct PDU),0,(struct sockaddr*)&addr_server,sizeof(addr_server));
     select_return = select(sock+1,&fdread, NULL, NULL, &tv);
-
     if(select_return) {
       recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
       if(debug){
@@ -188,14 +190,25 @@ int alive(){
       }
 
       if(recib->tipusPaq[0] == 0x11){
-        if(strcmp(recib->nomEquip, server->nomEquip) == 0 &&
-            strcmp(recib->MAC, server->MAC) == 0 &&
-            strcmp(recib->numAleatori, server->numAleatori) == 0){
+        if(strcmp(recib->nomEquip, nomSever) == 0 &&
+            strcmp(recib->MAC, macServer) == 0 &&
+            strcmp(recib->numAleatori, numAlServer) == 0){
               if(!alive) {
                 mostraMSG("ALIVE", "Equip");
                 alive = true;
               }
-            } else perduts++;
+              if(debug){
+                hora();
+                printf("%2d:%02d:%02d: INFO =>  Acceptat ALIVE (Servidor: nom=%s, mac=%s, alea=%s)\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, recib->nomEquip, recib->MAC, recib->numAleatori);
+              }
+              perduts = 0;
+            } else {
+              if(debug){
+                hora();
+                printf("%2d:%02d:%02d: INFO  =>  Error recepció paquet UDP. Servidor incorrecte (correcte: nom=%s, ip=%s, mac=%s, alea=%s))\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, nomSever, inet_ntoa(*((struct in_addr*)ent->h_addr_list[0])), macServer, numAlServer);
+              }
+              perduts++;
+            }
       } else if(recib->tipusPaq[0] == 0x13){
         if(debug){
           hora();
@@ -220,21 +233,29 @@ int main(int argc,char *argv[])
   /* Mirem les opcions introduides en la comanda */
   int opt;
   char *fichero = "client.cfg";
-  while((opt = getopt(argc, argv, ":c:d")) != -1)
-      {
-          switch(opt)
-          {
-              case 'c':
-                  fichero = optarg;
-                  break;
-              case 'd':
-                  debug = true;
-                  break;
-          }
+  while((opt = getopt(argc, argv, ":c:d")) != -1){
+    switch(opt){
+      case 'c':
+        fichero = optarg;
+        break;
+      case 'd':
+        debug = true;
+        break;
       }
+    }
+
+    if(debug){
+      hora();
+      printf("%2d:%02d:%02d: DEBUG =>  Llegits paràmetres línia de comandes\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+    }
 
   /* Carregem les dades del archiu .cfg a les variables corresponents */
   leerConfig(fichero);
+
+  if(debug){
+    hora();
+    printf("%2d:%02d:%02d: DEBUG =>  Llegits parametres arxius de configuració\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+  }
 
 	/* Crea un socket INET+DGRAM -> UDP */
 	sock=socket(AF_INET,SOCK_DGRAM,0);
@@ -265,8 +286,17 @@ int main(int argc,char *argv[])
   addr_server.sin_addr.s_addr=INADDR_ANY;
 	addr_server.sin_port=htons(port);
 
+
+  if(debug){
+    hora();
+    printf("%2d:%02d:%02d: DEBUG =>  Inici bucle de servei equip: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, prot.nomEquip);
+  }
+
   int reg;
+  pid_t pid, pid2, pidFinal;
+
   mostraMSG("DISCONNECTED", "Equip");
+  strcpy(prot.numAleatori, "000000");
 
   regis:
   reg = registrar();
@@ -280,21 +310,33 @@ int main(int argc,char *argv[])
     }
     strcpy(pdu->numAleatori, recib->numAleatori);
     portTCP = atoi(recib->dades);
-    server = recib;
+    strcpy(nomSever, recib->nomEquip);
+    strcpy(macServer, recib->MAC);
+    strcpy(numAlServer, recib->numAleatori);
+
     pdu->tipusPaq[0] = 0x10;
-    pid_t pid = fork();
+
+    pid = fork();
     if(pid) {
       // pare
-      pid_t pid2 = fork();
+      pid2 = fork();
 
       if(pid2) {
         // Pare, Controla el fills
-        pid_t pidFinal = wait(NULL);
+        esperar:
+        pidFinal = wait(NULL);
         if(pidFinal == pid) {
-          kill(pid2, SIGTERM);
+          kill(pid2, SIGKILL);
+          if(debug){
+            hora();
+            printf("%2d:%02d:%02d: DEBUG =>  Finalitzat procés per gestionar alives\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+          }
           goto regis;
         }
-        else kill(pid, SIGTERM);
+        else if(pidFinal == pid2){
+          close(sock);
+          kill(pid, SIGKILL);
+        } else goto esperar;
       } else {
         // Fill 2, Controla la entrada de comandes per consola
         char *escan;
@@ -308,11 +350,14 @@ int main(int argc,char *argv[])
         hora();
         printf("%2d:%02d:%02d: DEBUG =>  Creat procés per gestionar alives\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
       }
+
       int ret = alive();
+
       if(ret == 0) {
         mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)", "Equip");
         exit(0);
       }
     }
   }
+  close(sock);
 }
