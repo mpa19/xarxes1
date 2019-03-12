@@ -57,51 +57,50 @@ def setup():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("",options.port))
 
+listaClientes = []
 def mainloop():
-    global sock, options
-
-    try:
-        while True:
-            listaClientes = []
-            f = open("equips.dat")
-            datos = f.readline()
-
-            while datos != "\n":
-                datosClient = datos.split()
-                print >>sys.stderr, "Datagrama de DATO: ",datosClient[0]
-                listaClientes.append(clients(datosClient[0],"",datosClient[1],"","DISCONNECTED"))
-                datos = f.readline()
+    global sock, options, listaClientes
 
 
-            print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[0].nom
-            print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[1].nom
-            print >>sys.stderr, "Datagrama de NUM CLIENTS: ",len(listaClientes)
+    f = open("equips.dat")
+    datos = f.readline()
+
+    while datos != "\n":
+        datosClient = datos.split()
+        print >>sys.stderr, "Datagrama de DATO: ",datosClient[0]
+        listaClientes.append(clients(datosClient[0],"",datosClient[1],"","DISCONNECTED"))
+        datos = f.readline()
+
+
+    print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[0].nom
+    print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[1].nom
+    print >>sys.stderr, "Datagrama de NUM CLIENTS: ",len(listaClientes)
 
 
 
-            data,adreca = sock.recvfrom(78)
+    data,adreca = sock.recvfrom(78)
+    magic = unpack('B7s13s7s50s',data[:78])
+    print >>sys.stderr, "Datagrama de DATA: ",data
+    print >>sys.stderr, "Datagrama de MAGIC: ",magic
 
-	    magic = unpack('B7s13s7s50s',data[:78])
-            print >>sys.stderr, "Datagrama de DATA: ",data
-            print >>sys.stderr, "Datagrama de MAGIC: ",magic
+    magic = list(magic)
+    magic[0] = 0x01
+    magic[1] = "NMS-01"
+    magic[2] = "43D3F4D80005"
+    magic[3] = "714906"
+    magic[4] = "9102"
 
-	    magic = list(magic)
-	    magic[0] = 0x01
-	    magic[1] = "NMS-01"
-	    magic[2] = "43D3F4D80005"
-	    magic[3] = "714906"
-	    magic[4] = "9102"
+    a = pack('B7s13s7s50s',magic[0], magic[1],magic[2],magic[3],magic[4])
+    print >>sys.stderr, "Datagrama de ENVIAR: ",a
+    sock.sendto(a,adreca)
 
-	    a = pack('B7s13s7s50s',magic[0], magic[1],magic[2],magic[3],magic[4])
-            print >>sys.stderr, "Datagrama de ENVIAR: ",a
-            sock.sendto(a,adreca)
-    finally:
-        sock.close()
 
 def main():
-    global options, args
+    global options, args, listaClientes
     setup()
     mainloop()
+    print >>sys.stderr, "AADatagrama de NUM CLIENTS: ",len(listaClientes)
+
 
 if __name__ == '__main__':
     try:
