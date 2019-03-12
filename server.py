@@ -27,14 +27,14 @@ LICENSE
 
 VERSION
 
-    0.0.1 
+    0.0.1
 """
 
 import sys, os, traceback, optparse
 import time, datetime
 import socket
 from struct import *
- 
+
 
 __program__ = "echoudp-server"
 __version__ = '0.0.1'
@@ -44,6 +44,13 @@ __license__ = 'GPL3+'
 __vcs_id__ = '$Id: echoudp-server.py 554 2012-05-06 08:07:51Z carlesm $'
 
 
+class clients:
+    def __init__(self,nom,ip,mac,numAl,estat):
+        self.nom = nom
+        self.ip = ip
+        self.mac = mac
+        self.numAl = numAl
+        self.estat = estat
 
 def setup():
     global sock, options
@@ -52,9 +59,27 @@ def setup():
 
 def mainloop():
     global sock, options
+
     try:
         while True:
-            data,adreca = sock.recvfrom(8192)
+            listaClientes = []
+            f = open("equips.dat")
+            datos = f.readline()
+
+            while datos != "\n":
+                datosClient = datos.split()
+                print >>sys.stderr, "Datagrama de DATO: ",datosClient[0]
+                listaClientes.append(clients(datosClient[0],"",datosClient[1],"","DISCONNECTED"))
+                datos = f.readline()
+
+
+            print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[0].nom
+            print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[1].nom
+            print >>sys.stderr, "Datagrama de NUM CLIENTS: ",len(listaClientes)
+
+
+
+            data,adreca = sock.recvfrom(78)
 
 	    magic = unpack('B7s13s7s50s',data[:78])
             print >>sys.stderr, "Datagrama de DATA: ",data
@@ -94,7 +119,7 @@ if __name__ == '__main__':
         now_time = time.time()
         if options.verbose: print time.asctime()
         if options.verbose: print 'TOTAL TIME:', (now_time - start_time), "(seconds)"
-        if options.verbose: print '          :', datetime.timedelta(seconds=(now_time - start_time)) 
+        if options.verbose: print '          :', datetime.timedelta(seconds=(now_time - start_time))
         sys.exit(0)
     except KeyboardInterrupt, e: # Ctrl-C
         raise e
@@ -105,7 +130,3 @@ if __name__ == '__main__':
         print str(e)
         traceback.print_exc()
         os._exit(1)
-
-
-
-
