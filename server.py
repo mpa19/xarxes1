@@ -55,7 +55,7 @@ class clients:
 def setup():
     global sock, options
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("",options.port))
+    sock.bind(("",2019))
 
 listaClientes = []
 def mainloop():
@@ -67,21 +67,21 @@ def mainloop():
 
     while datos != "\n":
         datosClient = datos.split()
-        print >>sys.stderr, "Datagrama de DATO: ",datosClient[0]
+        print ("Datagrama de DATO: ",datosClient[0])
         listaClientes.append(clients(datosClient[0],"",datosClient[1],"","DISCONNECTED"))
         datos = f.readline()
 
 
-    print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[0].nom
-    print >>sys.stderr, "Datagrama de CLIENTS: ",listaClientes[1].nom
-    print >>sys.stderr, "Datagrama de NUM CLIENTS: ",len(listaClientes)
+    print ("Datagrama de CLIENTS: ",listaClientes[0].nom)
+    print ("Datagrama de CLIENTS: ",listaClientes[1].nom)
+    print ("Datagrama de NUM CLIENTS: ",len(listaClientes))
 
 
 
     data,adreca = sock.recvfrom(78)
     magic = unpack('B7s13s7s50s',data[:78])
-    print >>sys.stderr, "Datagrama de DATA: ",data
-    print >>sys.stderr, "Datagrama de MAGIC: ",magic
+    print ("Datagrama de DATA: ",data)
+    print ("Datagrama de MAGIC: ",magic)
 
     magic = list(magic)
     magic[0] = 0x01
@@ -89,9 +89,12 @@ def mainloop():
     magic[2] = "43D3F4D80005"
     magic[3] = "714906"
     magic[4] = "9102"
+    
+    #string "B7s13s7s50s"
+    #s = struct.Struct('B7s13s7s50s')
+    a = pack('B7s13s7s50s',magic[0], magic[1].encode('utf-8'),magic[2].encode('utf-8'),magic[3].encode('utf-8'),magic[4].encode('utf-8'))
 
-    a = pack('B7s13s7s50s',magic[0], magic[1],magic[2],magic[3],magic[4])
-    print >>sys.stderr, "Datagrama de ENVIAR: ",a
+    print ("Datagrama de ENVIAR: ",a)
     sock.sendto(a,adreca)
 
 
@@ -99,33 +102,33 @@ def main():
     global options, args, listaClientes
     setup()
     mainloop()
-    print >>sys.stderr, "AADatagrama de NUM CLIENTS: ",len(listaClientes)
+    print ("AADatagrama de NUM CLIENTS: ",len(listaClientes))
 
 
 if __name__ == '__main__':
-    try:
-        start_time = time.time()
-        parser = optparse.OptionParser(formatter=optparse.TitledHelpFormatter(), usage=globals()["__doc__"],version=__version__)
-        parser.add_option ('-v', '--verbose', action='store_true', default=False, help='verbose output')
-        parser.add_option ('-p', '--port', action='store', type='int', default=2019, help='Listening port, default 1234')
-        (options, args) = parser.parse_args()
-        if len(args) > 0: parser.error ('bad args, use --help for help')
+#    try:
+ #       start_time = time.time()
+ #       parser = optparse.OptionParser(formatter=optparse.TitledHelpFormatter(), usage=globals()["__doc__"],version=__version__)
+  #      parser.add_option ('-v', '--verbose', action='store_true', default=False, help='verbose output')
+   #     parser.add_option ('-p', '--port', action='store', type='int', default=2019, help='Listening port, default 1234')
+    #    (options, args) = parser.parse_args()
+     #   if len(args) > 0: parser.error ('bad args, use --help for help')
 
-        if options.verbose: print time.asctime()
+        #if options.verbose: print time.asctime()
 
         main()
 
-        now_time = time.time()
-        if options.verbose: print time.asctime()
-        if options.verbose: print 'TOTAL TIME:', (now_time - start_time), "(seconds)"
-        if options.verbose: print '          :', datetime.timedelta(seconds=(now_time - start_time))
+#        now_time = time.time()
+ #       if options.verbose: print time.asctime()
+  #      if options.verbose: print 'TOTAL TIME:', (now_time - start_time), "(seconds)"
+   #     if options.verbose: print '          :', datetime.timedelta(seconds=(now_time - start_time))
         sys.exit(0)
-    except KeyboardInterrupt, e: # Ctrl-C
-        raise e
-    except SystemExit, e: # sys.exit()
-        raise e
-    except Exception, e:
-        print 'ERROR, UNEXPECTED EXCEPTION'
-        print str(e)
-        traceback.print_exc()
-        os._exit(1)
+    #except KeyboardInterrupt, e: # Ctrl-C
+     #   raise e
+    #except SystemExit, e: # sys.exit()
+     #   raise e
+   # except Exception, e:
+    #    print 'ERROR, UNEXPECTED EXCEPTION'
+     # print str(e)
+      #  traceback.print_exc()
+       # os._exit(1)
