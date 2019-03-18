@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -5,17 +7,18 @@
 #include <time.h>
 #include <string.h>
 
+#include <getopt.h>
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
-#include <time.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 
 #include <stdbool.h>
-
-#define LONGDADES	78
 
 
 struct PDU {
@@ -26,10 +29,15 @@ struct PDU {
   char dades[50];
 };
 
+void hora();
+void mostraMSG(char[], char[]);
+char* tPaquet(struct PDU *);
+int registrar();
+void leerConfig(char*);
+int alive();
+
 time_t raw_time;
 struct tm *ptr_ts;
-
-char dadcli[LONGDADES];
 struct hostent *ent;
 int sock,port,laddr_cli,a, portTCP, procesos = 1;
 struct PDU *pdu;
@@ -37,6 +45,7 @@ struct PDU *recib;
 struct PDU prot;
 struct PDU prot2;
 struct sockaddr_in	addr_server,addr_cli;
+
 bool debug = false;
 char numAlServer[7], nomSever[7], macServer[13];
 
@@ -60,6 +69,7 @@ char* tPaquet(struct PDU *pdu){
   else if(pdu->tipusPaq[0] == 0x11) return "ALIVE_ACK";
   else if(pdu->tipusPaq[0] == 0x12) return "ALIVE_NACK";
   else if(pdu->tipusPaq[0] == 0x13) return "ALIVE_REJ";
+  return "";
 }
 
 int registrar(){
@@ -336,10 +346,11 @@ int main(int argc,char *argv[])
         else if(pidFinal == pid2){
           close(sock);
           kill(pid, SIGKILL);
+          exit(0);
         } else goto esperar;
       } else {
         // Fill 2, Controla la entrada de comandes per consola
-        char *escan;
+        char *escan = "";
         scanf("%s",escan);
         if(strcmp(escan, "quit")) exit(0);
       }
