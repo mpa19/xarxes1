@@ -61,10 +61,10 @@ def setup():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("",int(datosServer[2])))
 
-listaClientes = []
-
 #0- NomServer   1- MACserver  2- UDPport  3- TCPport
 datosServer = []
+data = []
+adreca = []
 
 def leerConfig():
     global sock, options, listaClientes, datosServer
@@ -93,27 +93,32 @@ def leerConfig():
 
 
 def registro(indexClient, index):
-    global adreca, datosServer, sock, paquete, datosClient, listaClientes
+    global adreca, datosServer, sock, data, datosClient, listaClientes
 
-    paquete[index] = list(paquete[index])
-    paquete[index][0] = 0x01
+    data[index] = list(data[index])
+    data[index][0] = 0x01
 
     listaClientes[indexClient].numAl = "715642"
-    a = pack('B7s13s7s50s',paquete[index][0], datosServer[0].encode('utf-8'),datosServer[1].encode('utf-8'),listaClientes[indexClient].numAl.encode('utf-8'),datosServer[3].encode('utf-8'))
 
-    listaClientes[indexClient].estat = "REGISTERED"
-
+    a = pack('B7s13s7s50s',data[index][0], datosServer[0].encode('utf-8'),datosServer[1].encode('utf-8'),listaClientes[indexClient].numAl.encode('utf-8'),datosServer[3].encode('utf-8'))
+    cliente = listaClientes[indexClient]
+    cliente.estat = "REGISTERED"
+    listaClientes.pop(indexClient)
+    listaClientes.insert(indexClient, cliente)
+    #listaClientes[indexClient].estat = "REGISTERED"
+    print("AAAAAAAAAA",listaClientes[indexClient].estat)
+    print("adreça",adreca[index])
     sock.sendto(a,adreca[index])
+    print("enviado")
 
 
-data = []
-adreca = []
-paquete = []
 def entradaPaquet():
-    global data, adreca, sock, paquete, listaClientes
+    global data, adreca, sock, data, listaClientes
 
     i = 0
     while(1):
+        print("AAAAAAa",len(listaClientes))
+
         print("ESTADOOO",listaClientes[0].nom)
         print("ESTADOOO",listaClientes[0].estat)
 
@@ -122,34 +127,40 @@ def entradaPaquet():
 
         print("ESTADOOO",listaClientes[2].nom)
         print("ESTADOOO",listaClientes[2].estat)
+        print("ESTADOOO",listaClientes[3].estat)
+        print("ESTADOOO",listaClientes[4].estat)
+
+
+
 
 
         data1,adreca1 = sock.recvfrom(78)
+        print("BBBBB:",adreca1)
         data.append(data1)
         adreca.append(adreca1)
-        paquete = data
+        #paquete = data
         print("HOLAAA")
         p2 = Process(target=gestionarPaquet, args=(i,))
         p2.daemon = True
         p2.start()
-        p2.join(2)
-        #gestionarPaquet(i)
+        p2.join(1)
+        print("AAAAAAa",len(listaClientes))
+
         i += 1
 
 
 
 def gestionarPaquet(index):
-    global data, adreca, sock, paquete, listaClientes
-    print("a")
-    paquete[index] = unpack('=B7s13s7s50s',data[index][:78])
-    print("DATA: ",paquete[index][0])
-    if paquete[index][0] == 0:
+    global data, adreca, sock, data, listaClientes
+    data[index] = unpack('=B7s13s7s50s',data[index][:78])
+    print("DATA: ",data[index][0])
+    if data[index][0] == 0:
         print("Registro")
         correcto = comprobarEstado(0, index)
         if correcto != None:
             registro(correcto, index)
             print("ESTADO:",listaClientes[0].estat)
-    elif paquete[index][0] == 16:
+    elif data[index][0] == 16:
         print("PAQUET ALIVE")
         print("ESTADO:",listaClientes[0].estat)
 
@@ -162,9 +173,9 @@ def gestionarPaquet(index):
 
 
 def encontrarCliente(index):
-    global paquete, listaClientes
+    global data, listaClientes
 
-    estado = paquete[index][1].split(b'\0',1)[0]
+    estado = data[index][1].split(b'\0',1)[0]
 
     for indexClient in range(len(listaClientes)):
         if listaClientes[indexClient].nom == estado.decode('utf-8'):
@@ -173,7 +184,7 @@ def encontrarCliente(index):
     return None
 
 def comprobarEstado(tipo, index):
-    global listaClientes, paquete, clientsAlive, timeAlive
+    global listaClientes, data, clientsAlive, timeAlive
 
     indexClient = encontrarCliente(index)
 
@@ -206,17 +217,18 @@ def comprobarEstado(tipo, index):
 
 
 def enviarAlive(destinatari, index):
-    global adreca, datosServer, sock, paquete, datosClient, listaClientes
+    global adreca, datosServer, sock, data, datosClient, listaClientes
 
-    paquete[index] = list(paquete[index])
-    paquete[index][0] = 0x11
+    data[index] = list(data[index])
+    data[index][0] = 0x11
 
-    a = pack('B7s13s7s50s',paquete[index][0], datosServer[0].encode('utf-8'),datosServer[1].encode('utf-8'),listaClientes[destinatari].numAl.encode('utf-8'),"".encode('utf-8'))
+    a = pack('B7s13s7s50s',data[index][0], datosServer[0].encode('utf-8'),datosServer[1].encode('utf-8'),listaClientes[destinatari].numAl.encode('utf-8'),"".encode('utf-8'))
 
     sock.sendto(a,adreca[index])
 
 
-def alives(clientsAlive, timeAlive):
+def alives():
+    global clientsAlive, timeAlive
     while 1:
         for x, val in enumerate(timeAlive):
             timeAlive[x] -= 1
@@ -236,15 +248,21 @@ if __name__ == '__main__':
      #   if len(args) > 0: parser.error ('bad args, use --help for help')
 
         #if options.verbose: print time.asctime()
-        leerConfig()
-        setup()
+
 
         with Manager() as manager:
             clientsAlive = manager.list()
             timeAlive = manager.list()
+            listaClientes = manager.list()
 
 
-            p = Process(target=alives, args=(clientsAlive, timeAlive))
+
+            leerConfig()
+            setup()
+
+
+
+            p = Process(target=alives, args=())
             p.daemon = True
             p.start()
             p.join(1)
@@ -257,8 +275,8 @@ if __name__ == '__main__':
             #p1.processes = False
             #p1.start()
             #p1.join(1)
-
             entradaPaquet()
+
 
 
             #clientsAlive.append("Mario")
