@@ -237,6 +237,15 @@ def alives():
                 clientsAlive.pop(x)
         time.sleep(1)
 
+def mirarComando(fileno):
+    sys.stdin = os.fdopen(fileno)
+    comanda = ""
+    while True:
+        comanda = input()
+
+        if comanda.lower() == 'quit':
+            print("HOOLA")
+            #os.kill(os.getppid(), signal.SIGTERM)
 
 if __name__ == '__main__':
 #    try:
@@ -270,12 +279,20 @@ if __name__ == '__main__':
 
 
             #crear otro daemon para controlar la entrada recvfrom
-            #p1 = Process(target=entradaPaquet)
+            p1 = Process(target=entradaPaquet)
             #p1.daemon = True
-            #p1.processes = False
-            #p1.start()
+            p1.processes = False
+            p1.start()
             #p1.join(1)
-            entradaPaquet()
+
+            print("HOLA")
+            #fn = sys.stdin.fileno()
+            #p3 = Process(target=mirarComando, args=(fn,))
+            #p3.daemon = True
+            #p3.start()
+            #p3.join(1)
+
+            #entradaPaquet()
 
 
 
@@ -285,6 +302,7 @@ if __name__ == '__main__':
             while 1:
                 name = input()
                 if name == 'quit':
+                    p1.terminate()
                     sys.exit(0)
                 elif name == 'list':
                     print(clientsAlive[0])
