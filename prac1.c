@@ -109,7 +109,7 @@ int registrar(){
       if(select_return < 0){
         return -1;
       } else if(select_return) {
-        recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
+        recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(socklen_t *)0);
         if(debug){
           hora();
           printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU), tPaquet(recib), recib->nomEquip, recib->MAC, recib->numAleatori, recib->dades);
@@ -193,7 +193,7 @@ int alive(){
     sendto(sock,pdu,sizeof(struct PDU),0,(struct sockaddr*)&addr_server,sizeof(addr_server));
     select_return = select(sock+1,&fdread, NULL, NULL, &tv);
     if(select_return) {
-      recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(int *)0);
+      recvfrom(sock,recib,sizeof(struct PDU),0,(struct sockaddr *)0,(socklen_t *)0);
       if(debug){
         hora();
         printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=%s, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDU),tPaquet(recib), recib->nomEquip, recib->MAC, recib->numAleatori, recib->dades);
