@@ -92,6 +92,7 @@ def leerConfig():
     f.close()
 
 
+
 def registro(indexClient, index):
     global adreca, datosServer, sock, data, datosClient, listaClientes
 
@@ -106,10 +107,9 @@ def registro(indexClient, index):
     listaClientes.pop(indexClient)
     listaClientes.insert(indexClient, cliente)
     #listaClientes[indexClient].estat = "REGISTERED"
-    print("AAAAAAAAAA",listaClientes[indexClient].estat)
-    print("adreça",adreca[index])
+
     sock.sendto(a,adreca[index])
-    print("enviado")
+
 
 
 def entradaPaquet():
@@ -117,34 +117,16 @@ def entradaPaquet():
 
     i = 0
     while(1):
-        print("AAAAAAa",len(listaClientes))
-
-        print("ESTADOOO",listaClientes[0].nom)
-        print("ESTADOOO",listaClientes[0].estat)
-
-        print("ESTADOOO",listaClientes[1].nom)
-        print("ESTADOOO",listaClientes[1].estat)
-
-        print("ESTADOOO",listaClientes[2].nom)
-        print("ESTADOOO",listaClientes[2].estat)
-        print("ESTADOOO",listaClientes[3].estat)
-        print("ESTADOOO",listaClientes[4].estat)
-
-
-
 
 
         data1,adreca1 = sock.recvfrom(78)
-        print("BBBBB:",adreca1)
         data.append(data1)
         adreca.append(adreca1)
         #paquete = data
-        print("HOLAAA")
         p2 = Process(target=gestionarPaquet, args=(i,))
         p2.daemon = True
         p2.start()
         p2.join(1)
-        print("AAAAAAa",len(listaClientes))
 
         i += 1
 
@@ -153,21 +135,18 @@ def entradaPaquet():
 def gestionarPaquet(index):
     global data, adreca, sock, data, listaClientes
     data[index] = unpack('=B7s13s7s50s',data[index][:78])
-    print("DATA: ",data[index][0])
     if data[index][0] == 0:
-        print("Registro")
+
         correcto = comprobarEstado(0, index)
         if correcto != None:
             registro(correcto, index)
-            print("ESTADO:",listaClientes[0].estat)
+
     elif data[index][0] == 16:
-        print("PAQUET ALIVE")
-        print("ESTADO:",listaClientes[0].estat)
+
 
         correcto = comprobarEstado(1, index)
         if correcto != None:
-            print("ENVIAR ALIVE")
-            print("ESTADO:",listaClientes[0].estat)
+
 
             enviarAlive(correcto, index)
 
@@ -190,21 +169,25 @@ def comprobarEstado(tipo, index):
 
     if indexClient != None:
         if tipo == 0:
-            print("TIPO")
             if listaClientes[indexClient].estat == "DISCONNECTED":
-                print("DEVOLVER")
                 return indexClient
             else:
+                #Enviar paquete de suplantacion de identidad
+                enviarPaqueteError(index, "Error en dades de l'equip", 0x02)
                 return None
         else:
             print(listaClientes[indexClient].estat)
             print(listaClientes[indexClient].nom)
-            print("INDEX FINAL", indexClient)
 
 
             if listaClientes[indexClient].estat == "REGISTERED":
                 clientsAlive.append(listaClientes[indexClient].nom)
                 timeAlive.append(6)
+                cliente = listaClientes[indexClient]
+                cliente.estat = "ALIVE"
+                listaClientes.pop(indexClient)
+                listaClientes.insert(indexClient, cliente)
+
                 return indexClient
             elif listaClientes[indexClient].estat == "ALIVE":
                 indexAlive = clientsAlive.index(listaClientes[indexClient].nom)
@@ -213,8 +196,23 @@ def comprobarEstado(tipo, index):
             else:
                 return None
     else:
+        #Enviar paquete que no se encuentra registrado
+        enviarPaqueteError(index, "Equip no autoritzat en el sistema", 0x03)
         return None
 
+def enviarPaqueteError(index, msg, tipus):
+    global sock, data
+
+    data[index] = list(data[index])
+    data[index][0] = tipus
+    data[index][1] = ""
+    data[index][2] = "000000000000"
+    data[index][4] = msg
+
+
+    a = pack('B7s13s7s50s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3],data[index][4].encode('utf-8'))
+    sock.sendto(a,adreca[index])
+    print("enviado")
 
 def enviarAlive(destinatari, index):
     global adreca, datosServer, sock, data, datosClient, listaClientes
@@ -237,15 +235,6 @@ def alives():
                 clientsAlive.pop(x)
         time.sleep(1)
 
-def mirarComando(fileno):
-    sys.stdin = os.fdopen(fileno)
-    comanda = ""
-    while True:
-        comanda = input()
-
-        if comanda.lower() == 'quit':
-            print("HOOLA")
-            #os.kill(os.getppid(), signal.SIGTERM)
 
 if __name__ == '__main__':
 #    try:
