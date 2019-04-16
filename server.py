@@ -9,6 +9,7 @@ import signal
 from multiprocessing import Process, Value, Array, Manager
 from random import seed
 from random import randint
+from optparse import OptionParser
 
 __program__ = "server"
 __version__ = '0.0.1'
@@ -41,7 +42,7 @@ def leerConfig():
     global sock, options, listaClientes, datosServer
 
     #Leer archivo de equipos
-    f = open("equips.dat")
+    f = open(options.equips)
     datos = f.readline()
 
     while datos != "\n":
@@ -52,7 +53,7 @@ def leerConfig():
     f.close()
 
     #Leer archivo de config
-    f = open("server.cfg")
+    f = open(options.servidor)
     datos = f.readline()
 
     while datos != "\n":
@@ -62,7 +63,7 @@ def leerConfig():
 
     f.close()
 
-
+#Crea un numero random que no este ya assignado a un cliente
 def randomNumber():
     global listaClientes
     numInvalido = False
@@ -75,6 +76,8 @@ def randomNumber():
         if numInvalido == False:
             return str(value)
 
+#Cambia el estado del cliente a REGISTERED y envia el paquete REGISTER_ACK
+#con la información del servidor y el puerto
 def registro(indexClient, index):
     global adreca, datosServer, sock, data, datosClient, listaClientes
 
@@ -92,6 +95,7 @@ def registro(indexClient, index):
 
     sock.sendto(a,adreca[index])
 
+#Espera la entrada de un paquete y crea un hijo en segundo plano para gestionarlo
 def entradaPaquet():
     global data, adreca, sock, data, listaClientes
 
@@ -107,7 +111,7 @@ def entradaPaquet():
 
         i += 1
 
-
+#Mira el paquete que ha llegado y dependiendo del tipo sabe si es ALIVE o REGISTER
 def gestionarPaquet(index):
     global data, adreca, sock, data, listaClientes
     data[index] = unpack('=B7s13s7s50s',data[index][:78])
@@ -122,21 +126,11 @@ def gestionarPaquet(index):
             enviarAlive(correcto, index)
 
 
-def encontrarCliente(index):
-    global data, listaClientes
-
-    estado = data[index][1].split(b'\0',1)[0]
-
-    for indexClient in range(len(listaClientes)):
-        if listaClientes[indexClient].nom == estado.decode('utf-8'):
-            return indexClient
-
-    return None
-
+#Mirar que tipo de paquete a entrado y en que estado deberia estar
 def comprobarEstado(tipo, index):
     global listaClientes, data, clientsAlive, timeAlive, timePrimerAlive, clientsRegistered
 
-    indexClient = encontrarCliente(index)
+    indexClient = buscarIndexCliente(index, 3)
 
     if indexClient != None:
         if tipo == 0:
@@ -189,7 +183,7 @@ def comprobarEstado(tipo, index):
             enviarPaqueteError(index, "Equip no autoritzat en el sistema", 0x03)
         return None
 
-
+#Mirar la informacion del paquete si es correcta con la que hay guardada
 def comprobarAlive(indexClient, index):
     global listaClientes, data, adreca
 
@@ -206,6 +200,7 @@ def comprobarAlive(indexClient, index):
         enviarPaqueteError(index, "Error en dades de l'equip", 0x12)
         return False
 
+#Enviar un paquete de error NACK o REJ, tanto de ALIVE como REGISTER
 def enviarPaqueteError(index, msg, tipus):
     global sock, data
     print("ENVIAR ERROR")
@@ -219,6 +214,7 @@ def enviarPaqueteError(index, msg, tipus):
     a = pack('B7s13s7s50s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3].encode('utf-8'),data[index][4].encode('utf-8'))
     sock.sendto(a,adreca[index])
 
+#Enviar paquete ALIVE_ACK
 def enviarAlive(destinatari, index):
     global adreca, datosServer, sock, data, datosClient, listaClientes
 
@@ -230,18 +226,25 @@ def enviarAlive(destinatari, index):
 
     sock.sendto(a,adreca[index])
 
-
+#Encuentra el index del cliente en la lista de los clientes autorizados
 def buscarIndexCliente(index, donde):
-    global clientsAlive, clientsRegistered, listaClientes
+    global clientsAlive, clientsRegistered, listaClientes, data
     for indexClient in range(len(listaClientes)):
         if donde == 0:
             if listaClientes[indexClient].nom == clientsAlive[index]:
                 return int(indexClient)
-        else:
+        elif donde == 1:
             if listaClientes[indexClient].nom == clientsRegistered[index]:
                 return int(indexClient)
+        else:
+            nom = data[index][1].split(b'\0',1)[0]
+            if listaClientes[indexClient].nom == nom.decode('utf-8'):
+                return indexClient
+    return None
 
 
+
+#Controlador de los Alive, tanto los primeros como los demas
 def alives():
     global clientsAlive, timeAlive, listaClientes, timePrimerAlive, clientsRegistered
 
@@ -277,16 +280,13 @@ def alives():
 
 
 if __name__ == '__main__':
-#    try:
- #       start_time = time.time()
- #       parser = optparse.OptionParser(formatter=optparse.TitledHelpFormatter(), usage=globals()["__doc__"],version=__version__)
-  #      parser.add_option ('-v', '--verbose', action='store_true', default=False, help='verbose output')
-   #     parser.add_option ('-p', '--port', action='store', type='int', default=2019, help='Listening port, default 1234')
-    #    (options, args) = parser.parse_args()
-     #   if len(args) > 0: parser.error ('bad args, use --help for help')
 
-        #if options.verbose: print time.asctime()
-
+        #Opciones de comanda
+        parser = OptionParser()
+        parser.add_option("-u", type="string", dest="equips", default="equips.dat")
+        parser.add_option("-c", type="string", dest="servidor", default="server.cfg")
+        parser.add_option("-d", action="store_true", dest="debug", default=False)
+        (options, args) = parser.parse_args()
 
         with Manager() as manager:
             clientsAlive = manager.list()
@@ -303,7 +303,6 @@ if __name__ == '__main__':
             p.start()
             p.join(1)
             print("Controladors de ALIVE activat")
-
 
             #crear otro daemon para controlar la entrada recvfrom
             p1 = Process(target=entradaPaquet)
@@ -323,21 +322,3 @@ if __name__ == '__main__':
                         print(listaClientes[indexClient].nom,"      ", listaClientes[indexClient].ip, listaClientes[indexClient].mac, listaClientes[indexClient].numAl, listaClientes[indexClient].estat)
                 else:
                     print("MSG.  =>  Comanda incorrecta")
-
-
-
-
-
-#        now_time = time.time()
- #       if options.verbose: print time.asctime()
-  #      if options.verbose: print 'TOTAL TIME:', (now_time - start_time), "(seconds)"
-   #     if options.verbose: print '          :', datetime.timedelta(seconds=(now_time - start_time))
-    #except KeyboardInterrupt, e: # Ctrl-C
-     #   raise e
-    #except SystemExit, e: # sys.exit()
-     #   raise e
-   # except Exception, e:
-    #    print 'ERROR, UNEXPECTED EXCEPTION'
-     # print str(e)
-      #  traceback.print_exc()
-       # os._exit(1)
