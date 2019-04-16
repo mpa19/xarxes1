@@ -134,13 +134,17 @@ def encontrarCliente(index):
     return None
 
 def comprobarEstado(tipo, index):
-    global listaClientes, data, clientsAlive, timeAlive
+    global listaClientes, data, clientsAlive, timeAlive, timePrimerAlive, clientsRegistered
 
     indexClient = encontrarCliente(index)
 
     if indexClient != None:
         if tipo == 0:
-            if listaClientes[indexClient].estat == "DISCONNECTED":
+            numAle = data[index][3].split(b'\0',1)[0]
+            if listaClientes[indexClient].estat == "DISCONNECTED" and \
+                numAle.decode('utf-8') == "000000":
+                timePrimerAlive.append(7)
+                clientsRegistered.append(listaClientes[indexClient].nom)
                 return indexClient
             else:
                 #Enviar paquete de suplantacion de identidad
@@ -151,9 +155,13 @@ def comprobarEstado(tipo, index):
             print(listaClientes[indexClient].nom)
 
             if listaClientes[indexClient].estat == "REGISTERED":
-                clientsAlive.append(listaClientes[indexClient].nom)
-                timeAlive.append(6)
+
                 if comprobarAlive(indexClient, index) == True:
+                    indexPrimerAlive = clientsRegistered.index(listaClientes[indexClient].nom)
+                    timePrimerAlive.pop(indexPrimerAlive)
+                    clientsRegistered.pop(indexPrimerAlive)
+                    clientsAlive.append(listaClientes[indexClient].nom)
+                    timeAlive.append(10)
                     cliente = listaClientes[indexClient]
                     cliente.estat = "ALIVE"
                     listaClientes.pop(indexClient)
@@ -165,7 +173,7 @@ def comprobarEstado(tipo, index):
             elif listaClientes[indexClient].estat == "ALIVE":
                 if comprobarAlive(indexClient, index) == True:
                     indexAlive = clientsAlive.index(listaClientes[indexClient].nom)
-                    timeAlive[indexAlive] = 6
+                    timeAlive[indexAlive] = 10
                     return indexClient
                 else:
                     return None
@@ -175,8 +183,12 @@ def comprobarEstado(tipo, index):
                 return None
     else:
         #Enviar paquete que no se encuentra registrado
-        enviarPaqueteError(index, "Equip no autoritzat en el sistema", 0x03)
+        if data[index][0] == 16:
+            enviarPaqueteError(index, "Equip no autoritzat en el sistema", 0x13)
+        else:
+            enviarPaqueteError(index, "Equip no autoritzat en el sistema", 0x03)
         return None
+
 
 def comprobarAlive(indexClient, index):
     global listaClientes, data, adreca
@@ -196,14 +208,15 @@ def comprobarAlive(indexClient, index):
 
 def enviarPaqueteError(index, msg, tipus):
     global sock, data
-
+    print("ENVIAR ERROR")
     data[index] = list(data[index])
     data[index][0] = tipus
     data[index][1] = ""
     data[index][2] = "000000000000"
+    data[index][3] = "000000"
     data[index][4] = msg
 
-    a = pack('B7s13s7s50s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3],data[index][4].encode('utf-8'))
+    a = pack('B7s13s7s50s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3].encode('utf-8'),data[index][4].encode('utf-8'))
     sock.sendto(a,adreca[index])
 
 def enviarAlive(destinatari, index):
@@ -218,23 +231,48 @@ def enviarAlive(destinatari, index):
     sock.sendto(a,adreca[index])
 
 
+def buscarIndexCliente(index, donde):
+    global clientsAlive, clientsRegistered, listaClientes
+    for indexClient in range(len(listaClientes)):
+        if donde == 0:
+            if listaClientes[indexClient].nom == clientsAlive[index]:
+                return int(indexClient)
+        else:
+            if listaClientes[indexClient].nom == clientsRegistered[index]:
+                return int(indexClient)
+
+
 def alives():
-    global clientsAlive, timeAlive
+    global clientsAlive, timeAlive, listaClientes, timePrimerAlive, clientsRegistered
+
     while 1:
         for x, val in enumerate(timeAlive):
             timeAlive[x] -= 1
             if timeAlive[x] == 0:
-                for indexClient in range(len(listaClientes)):
-                    if listaClientes[indexClient].nom == clientsAlive[x]:
-                        cliente = listaClientes[indexClient]
-                        cliente.ip = "        -"
-                        cliente.numAl = "     -"
-                        cliente.estat = "DISCONNECTED"
-                        listaClientes.pop(indexClient)
-                        listaClientes.insert(indexClient, cliente)
+                indexClient = buscarIndexCliente(x, 0)
+                cliente = listaClientes[indexClient]
+                cliente.ip = "        -"
+                cliente.numAl = "     -"
+                cliente.estat = "DISCONNECTED"
+                listaClientes.pop(indexClient)
+                listaClientes.insert(indexClient, cliente)
                 timeAlive.pop(x)
                 clientsAlive.pop(x)
-                listaClientes
+
+        for x, val in enumerate(timePrimerAlive):
+            timePrimerAlive[x] -= 1
+            if timePrimerAlive[x] == 0:
+                indexClient = buscarIndexCliente(x, 1)
+                cliente = listaClientes[indexClient]
+                cliente.ip = "        -"
+                cliente.numAl = "     -"
+                cliente.estat = "DISCONNECTED"
+                listaClientes.pop(indexClient)
+                listaClientes.insert(indexClient, cliente)
+                timePrimerAlive.pop(x)
+                clientsRegistered.pop(x)
+            print("AAAA", timePrimerAlive)
+
         time.sleep(1)
 
 
@@ -254,6 +292,8 @@ if __name__ == '__main__':
             clientsAlive = manager.list()
             timeAlive = manager.list()
             listaClientes = manager.list()
+            clientsRegistered = manager.list()
+            timePrimerAlive = manager.list()
 
             leerConfig()
             setup()
