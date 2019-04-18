@@ -223,6 +223,7 @@ def comprobarSend(index, newsocket):
     MAC = data[index][2].split(b'\0',1)[0]
     if destinatari == None or listaClientes[destinatari].mac != MAC.decode('utf-8') or \
         listaClientes[destinatari].estat == "DISCONNECTED":
+        data[index] = list(data[index])
         data[index][0] = 0x23
         data[index][4] = "Discrepacia en les dades principals de l'equip"
 
