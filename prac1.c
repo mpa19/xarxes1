@@ -29,6 +29,14 @@ struct PDU {
   char dades[50];
 };
 
+struct PDUtcp {
+  unsigned char tipusPaq[1];
+  char nomEquip[7];
+  char MAC[13];
+  char numAleatori[7];
+  char dades[150];
+};
+
 void hora();
 void mostraMSG(char[], char[]);
 char* tPaquet(struct PDU *);
@@ -350,9 +358,16 @@ int main(int argc,char *argv[])
         } else goto esperar;
       } else {
         // Fill 2, Controla la entrada de comandes per consola
-        char *escan = "";
-        scanf("%s",escan);
-        if(strcmp(escan, "quit")) exit(0);
+        while(1){
+          char line[4096];
+
+          fgets(line, sizeof(line), stdin);
+          if(strcmp(line, "quit\n") == 0) exit(0);
+          else if(strcmp(line, "send-conf\n") == 0){
+
+          } else printf("%2d:%02d:%02d: MSG.  =>  Comanda incorrecta\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+        }
+
       }
 
     } else {
