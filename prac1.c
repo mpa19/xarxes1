@@ -43,20 +43,30 @@ char* tPaquet(struct PDU *);
 int registrar();
 void leerConfig(char*);
 int alive();
+void crearScoketTCP();
+void paqueteSend();
 
+// ---------- Variables globales ---------- //
 time_t raw_time;
 struct tm *ptr_ts;
 struct hostent *ent;
-int sock,port,laddr_cli,a, portTCP, procesos = 1;
+int sock,port,a, portTCP, procesos = 1, sockTCP;
 struct PDU *pdu;
 struct PDU *recib;
 struct PDU prot;
 struct PDU prot2;
-struct sockaddr_in	addr_server,addr_cli;
+struct PDUtcp protTCP;
+struct PDUtcp *pduTCP;
+struct PDUtcp *recib;
+struct PDUtcp protTCP2;
+
+
+struct sockaddr_in	addr_server,addr_cli, addr_serverTCP,addr_cliTCP;
+char *ficheroCfg = "boot.cfg";
 
 bool debug = false;
 char numAlServer[7], nomSever[7], macServer[13];
-
+// ---------- Final Variables globales ---------- //
 
 void hora(){
   time (&raw_time);
@@ -80,6 +90,8 @@ char* tPaquet(struct PDU *pdu){
   return "";
 }
 
+
+/* ----------- Enviar paquetes registrar ----------- */
 int registrar(){
   struct timeval tv;
   int select_return, temps;
@@ -150,8 +162,10 @@ int registrar(){
   }
   return 0;
 }
+/* ----------- Fin Enviar paquetes registrar ----------- */
 
-/* Guardar datos del client.cfg */
+
+/* ---------- Guardar datos del client.cfg ---------- */
 void leerConfig(char* a) {
     char linea[30];
     FILE *fich;
@@ -175,7 +189,9 @@ void leerConfig(char* a) {
       cont++;
     }
 }
+/* ---------- Final Guardar datos del client.cfg ---------- */
 
+/* ---------- Gestion de los paquetes ALIVE, enviados y recibidos ---------- */
 int alive(){
   struct timeval tv;
   int select_return, perduts = 0;
@@ -245,12 +261,65 @@ int alive(){
     sleep(tv.tv_sec);
   }
 }
+/* ---------- Fin Gestion de los paquetes ALIVE, enviados y recibidos ---------- */
 
+/* ---------- Creacion socket TCP y connect con el server ----------- */
+void crearScoketTCP(){
+  printf("T");
+  sockTCP=socket(AF_INET,SOCK_STREAM,0);
+	if(sockTCP<0)
+	{
+		fprintf(stderr,"No puc obrir socket!!!\n");
+		exit(-1);
+	}
+
+	/* Adreça del servidor */
+	memset(&addr_serverTCP,0,sizeof (struct sockaddr_in));
+	addr_serverTCP.sin_family=AF_INET;
+	addr_serverTCP.sin_addr.s_addr=INADDR_ANY;
+	addr_serverTCP.sin_port=htons(portTCP);
+
+	/* Connectem amb el server */
+	a=connect(sockTCP,(struct sockaddr*)&addr_serverTCP,sizeof(addr_serverTCP));
+        if(a<0)
+          {
+              fprintf(stderr,"Error al connect\n");
+              exit(-2);
+          }
+}
+/* ---------- Fin Creacion socket TCP y cconnect con el server ----------- */
+
+/* ---------- Gestionar paquete send ---------- */
+void paqueteSend(){
+  /*struct timeval tv;
+  int select_return;
+  fd_set fdread;
+
+  tv.tv_sec = 4;
+  tv.tv_usec = 0;*/
+  protTCP.tipusPaq[0] = 0x20;
+  strcpy(protTCP.nomEquip, prot.nomEquip);
+  strcpy(protTCP.MAC, prot.MAC);
+  strcpy(protTCP.dades, ficheroCfg);
+  pduTCP = &protTCP;
+  strcpy(pduTCP->numAleatori, pdu->numAleatori);
+  write(sockTCP,pduTCP, sizeof(struct PDUtcp));
+  //select_return = select(sockTCP+1,&fdread, NULL, NULL, &tv);
+
+
+  /*if(strcmp(recib->nomEquip, nomSever) == 0 &&
+      strcmp(recib->MAC, macServer) == 0 &&
+      strcmp(recib->numAleatori, numAlServer) == 0)*/
+}
+/* ---------- Fin Gestionar paquete send ---------- */
+
+/* ---------- Funcion Main del cliente ------------ */
 int main(int argc,char *argv[])
 {
   /* Mirem les opcions introduides en la comanda */
   int opt;
   char *fichero = "client.cfg";
+
   while((opt = getopt(argc, argv, ":c:d")) != -1){
     switch(opt){
       case 'c':
@@ -364,7 +433,10 @@ int main(int argc,char *argv[])
           fgets(line, sizeof(line), stdin);
           if(strcmp(line, "quit\n") == 0) exit(0);
           else if(strcmp(line, "send-conf\n") == 0){
-
+            printf("WTF");
+            crearScoketTCP();
+            printf("B");
+            paqueteSend();
           } else printf("%2d:%02d:%02d: MSG.  =>  Comanda incorrecta\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
         }
 
