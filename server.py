@@ -2,7 +2,7 @@
 
 import sys, os, traceback, optparse
 import time, datetime
-import socket
+import socket, select
 from struct import *
 import os
 import signal
@@ -10,13 +10,7 @@ from multiprocessing import Process, Value, Array, Manager
 from random import seed
 from random import randint
 from optparse import OptionParser
-
-__program__ = "server"
-__version__ = '0.0.1'
-__author__ = 'Marc Perez>'
-__copyright__ = 'Copyright (c) 2019  Marc Perez '
-__license__ = 'GPL3+'
-__vcs_id__ = '$Id: server.py 554 2019-04-15 18:07:51Z mpa19 $'
+import re
 
 
 class clients:
@@ -29,14 +23,24 @@ class clients:
 
 
 def setup():
-    global sock, options, datosServer
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("",int(datosServer[2])))
+    global sock, options, datosServer, inputs
+    #Socket UDP
+    inputs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    inputs.bind(("",int(datosServer[2])))
+    sock.append(inputs)
+
+    #Socket TCP
+    inputs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    inputs.bind(("",int(datosServer[3])))
+    inputs.listen(5)
+    sock.append(inputs)
 
 #0- NomServer   1- MACserver  2- UDPport  3- TCPport
 datosServer = []
 data = []
 adreca = []
+sock = []
+
 
 def leerConfig():
     global sock, options, listaClientes, datosServer
@@ -49,7 +53,6 @@ def leerConfig():
         datosClient = datos.split()
         listaClientes.append(clients(datosClient[0],"        -",datosClient[1],"     -","DISCONNECTED"))
         datos = f.readline()
-
     f.close()
 
     #Leer archivo de config
@@ -60,7 +63,6 @@ def leerConfig():
         datosS = datos.split()
         datosServer.append(datosS[1])
         datos = f.readline()
-
     f.close()
 
 #Crea un numero random que no este ya assignado a un cliente
@@ -93,21 +95,29 @@ def registro(indexClient, index):
     listaClientes.pop(indexClient)
     listaClientes.insert(indexClient, cliente)
 
-    sock.sendto(a,adreca[index])
+    sock[0].sendto(a,adreca[index])
 
 #Espera la entrada de un paquete y crea un hijo en segundo plano para gestionarlo
 def entradaPaquet():
-    global data, adreca, sock, data, listaClientes
+    global data, adreca, sock, data, listaClientes, inputs
 
     i = 0
     while(1):
-        data1,adreca1 = sock.recvfrom(78)
-        data.append(data1)
-        adreca.append(adreca1)
-        p2 = Process(target=gestionarPaquet, args=(i,))
-        p2.daemon = True
+        infds, outfds, errfds = select.select(sock, [], [], 100000)
+        if [sock[0]] == infds:
+            data1,adreca1 = sock[0].recvfrom(78)
+            data.append(data1)
+            adreca.append(adreca1)
+            p2 = Process(target=gestionarPaquet, args=(i,))
+        elif [sock[1]] == infds:
+            newsocket,adreca1 = sock[1].accept()
+            data1 = newsocket.recv(178)
+            data.append(data1)
+            adreca.append(adreca1)
+            p2 = Process(target=paquetSend, args=(i,newsocket))
+
+        p2.processes = False
         p2.start()
-        p2.join(1)
 
         i += 1
 
@@ -144,10 +154,7 @@ def comprobarEstado(tipo, index):
                 #Enviar paquete de suplantacion de identidad
                 enviarPaqueteError(index, "Error en dades de l'equip", 0x02)
                 return None
-        else:
-            print(listaClientes[indexClient].estat)
-            print(listaClientes[indexClient].nom)
-
+        elif tipo == 1:
             if listaClientes[indexClient].estat == "REGISTERED":
 
                 if comprobarAlive(indexClient, index) == True:
@@ -183,6 +190,59 @@ def comprobarEstado(tipo, index):
             enviarPaqueteError(index, "Equip no autoritzat en el sistema", 0x03)
         return None
 
+
+def paquetSend(index, newsocket):
+    global data, datosServer, listaClientes, sock
+
+    data[index] = unpack('=B7s13s7s150s',data[index][:178])
+    destinatari = comprobarSend(index, newsocket)
+    if destinatari != False:
+        f = open('./'+listaClientes[destinatari].nom+'.cfg', 'w')
+        data[index] = list(data[index])
+        data[index][0] = 0x21
+
+        a = pack('B7s13s7s150s',data[index][0], datosServer[0].encode('utf-8'),datosServer[1].encode('utf-8'),listaClientes[destinatari].numAl.encode('utf-8'),(listaClientes[destinatari].nom+".cfg").encode('utf-8'))
+        newsocket.sendall(a)
+        while True:
+            dades = newsocket.recv(178)
+            if not dades:
+                f.truncate()
+                break
+            dades = unpack('=B7s13s7s150s',dades[:178])
+            dades = dades[4].split(b'\0',1)[0]
+            print(dades.decode('utf-8'))
+            f.write(dades.decode('utf-8'))
+    newsocket.close()
+    exit(0)
+
+def comprobarSend(index, newsocket):
+    global data, listaClientes
+
+    destinatari = buscarIndexCliente(index, 2)
+    numAl = data[index][3].split(b'\0',1)[0]
+    MAC = data[index][2].split(b'\0',1)[0]
+    if destinatari == None or listaClientes[destinatari].mac != MAC.decode('utf-8') or \
+        listaClientes[destinatari].estat == "DISCONNECTED":
+        data[index][0] = 0x23
+        data[index][4] = "Discrepacia en les dades principals de l'equip"
+
+    else:
+        if listaClientes[destinatari].numAl == numAl.decode('utf-8') or \
+            adreca[index][0] == listaClientes[destinatari].ip:
+            return destinatari
+
+        else:
+            data[index] = list(data[index])
+            data[index][0] = 0x22
+            data[index][4] = "Dades adicionals de l'equip incorrectes"
+
+    data[index][1] = ""
+    data[index][2] = "000000000000"
+    data[index][3] = "000000"
+    a = pack('B7s13s7s150s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3].encode('utf-8'),data[index][4].encode('utf-8'))
+    newsocket.sendall(a)
+    return False
+
 #Mirar la informacion del paquete si es correcta con la que hay guardada
 def comprobarAlive(indexClient, index):
     global listaClientes, data, adreca
@@ -212,19 +272,20 @@ def enviarPaqueteError(index, msg, tipus):
     data[index][4] = msg
 
     a = pack('B7s13s7s50s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3].encode('utf-8'),data[index][4].encode('utf-8'))
-    sock.sendto(a,adreca[index])
+    sock[0].sendto(a,adreca[index])
+    exit(0)
 
 #Enviar paquete ALIVE_ACK
 def enviarAlive(destinatari, index):
     global adreca, datosServer, sock, data, datosClient, listaClientes
 
-    print("ENVIAR ALIVE")
     data[index] = list(data[index])
     data[index][0] = 0x11
 
     a = pack('B7s13s7s50s',data[index][0], datosServer[0].encode('utf-8'),datosServer[1].encode('utf-8'),listaClientes[destinatari].numAl.encode('utf-8'),"".encode('utf-8'))
 
-    sock.sendto(a,adreca[index])
+    sock[0].sendto(a,adreca[index])
+    exit(0)
 
 #Encuentra el index del cliente en la lista de los clientes autorizados
 def buscarIndexCliente(index, donde):
@@ -241,8 +302,6 @@ def buscarIndexCliente(index, donde):
             if listaClientes[indexClient].nom == nom.decode('utf-8'):
                 return indexClient
     return None
-
-
 
 #Controlador de los Alive, tanto los primeros como los demas
 def alives():
