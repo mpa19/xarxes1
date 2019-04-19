@@ -11,6 +11,7 @@ from random import seed
 from random import randint
 from optparse import OptionParser
 import re
+import time
 
 
 class clients:
@@ -29,11 +30,16 @@ def setup():
     inputs.bind(("",int(datosServer[2])))
     sock.append(inputs)
 
+    if options.debug: print(time.strftime('%X:'),"DEBUG =>  Socket UDP actiu")
+
     #Socket TCP
     inputs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     inputs.bind(("",int(datosServer[3])))
     inputs.listen(5)
     sock.append(inputs)
+
+    if options.debug: print(time.strftime('%X:'),"DEBUG =>  Socket TCP actiu")
+
 
 #0- NomServer   1- MACserver  2- UDPport  3- TCPport
 datosServer = []
@@ -49,21 +55,31 @@ def leerConfig():
     f = open(options.equips)
     datos = f.readline()
 
-    while datos != "\n":
+    while True:
+        if not datos or datos == "\n":
+            break;
         datosClient = datos.split()
         listaClientes.append(clients(datosClient[0],"        -",datosClient[1],"     -","DISCONNECTED"))
         datos = f.readline()
     f.close()
 
+    if options.debug: print(time.strftime('%X:'),"INFO  =>  Llegits", len(listaClientes),"equips autoritzats en el sistema")
+
+
     #Leer archivo de config
     f = open(options.servidor)
     datos = f.readline()
 
-    while datos != "\n":
+    while True:
+        if not datos:
+            break;
         datosS = datos.split()
         datosServer.append(datosS[1])
         datos = f.readline()
     f.close()
+
+    if options.debug: print(time.strftime('%X:'),"DEBUG =>  Llegits paràmetres arxiu de configuració")
+
 
 #Crea un numero random que no este ya assignado a un cliente
 def randomNumber():
@@ -96,6 +112,8 @@ def registro(indexClient, index):
     listaClientes.insert(indexClient, cliente)
 
     sock[0].sendto(a,adreca[index])
+    print(time.strftime('%X:'),"Equip", cliente.nom, "passa a estat: REGISTERED")
+
 
 #Espera la entrada de un paquete y crea un hijo en segundo plano para gestionarlo
 def entradaPaquet():
@@ -167,6 +185,8 @@ def comprobarEstado(tipo, index):
                     cliente.estat = "ALIVE"
                     listaClientes.pop(indexClient)
                     listaClientes.insert(indexClient, cliente)
+                    print(time.strftime('%X:'),"Equip", cliente.nom, "passa a estat: ALIVE")
+
                     return indexClient
                 else:
                     return None
@@ -196,7 +216,7 @@ def paquetSend(index, newsocket):
 
     data[index] = unpack('=B7s13s7s150s',data[index][:178])
     destinatari = comprobarSend(index, newsocket)
-    if destinatari != False:
+    if destinatari > -1:
         f = open('./'+listaClientes[destinatari].nom+'.cfg', 'w')
         data[index] = list(data[index])
         data[index][0] = 0x21
@@ -210,7 +230,6 @@ def paquetSend(index, newsocket):
                 break
             dades = unpack('=B7s13s7s150s',dades[:178])
             dades = dades[4].split(b'\0',1)[0]
-            print(dades.decode('utf-8'))
             f.write(dades.decode('utf-8'))
     newsocket.close()
     exit(0)
@@ -242,7 +261,7 @@ def comprobarSend(index, newsocket):
     data[index][3] = "000000"
     a = pack('B7s13s7s150s',data[index][0], data[index][1].encode('utf-8'),data[index][2].encode('utf-8'),data[index][3].encode('utf-8'),data[index][4].encode('utf-8'))
     newsocket.sendall(a)
-    return False
+    return -1
 
 #Mirar la informacion del paquete si es correcta con la que hay guardada
 def comprobarAlive(indexClient, index):
@@ -307,6 +326,7 @@ def buscarIndexCliente(index, donde):
 #Controlador de los Alive, tanto los primeros como los demas
 def alives():
     global clientsAlive, timeAlive, listaClientes, timePrimerAlive, clientsRegistered
+    if options.debug: print(time.strftime('%X:'),"INFO  =>  Establert temporitzador per control alives")
 
     while 1:
         for x, val in enumerate(timeAlive):
@@ -321,6 +341,8 @@ def alives():
                 listaClientes.insert(indexClient, cliente)
                 timeAlive.pop(x)
                 clientsAlive.pop(x)
+                print(time.strftime('%X:'),"Equip", cliente.nom, "passa a estat: DISCONNECTED")
+
 
         for x, val in enumerate(timePrimerAlive):
             timePrimerAlive[x] -= 1
@@ -334,7 +356,7 @@ def alives():
                 listaClientes.insert(indexClient, cliente)
                 timePrimerAlive.pop(x)
                 clientsRegistered.pop(x)
-            print("AAAA", timePrimerAlive)
+                print(time.strftime('%X:'),"Equip", cliente.nom, "passa a estat: DISCONNECTED")
 
         time.sleep(1)
 
@@ -348,6 +370,8 @@ if __name__ == '__main__':
         parser.add_option("-d", action="store_true", dest="debug", default=False)
         (options, args) = parser.parse_args()
 
+        if options.debug: print(time.strftime('%X:'),"DEBUG =>  Llegits paràmetres línia de comandes")
+
         with Manager() as manager:
             clientsAlive = manager.list()
             timeAlive = manager.list()
@@ -358,18 +382,19 @@ if __name__ == '__main__':
             leerConfig()
             setup()
 
+            if options.debug: print(time.strftime('%X:'),"DEBUG =>  Creat fill per gestionar alives")
             p = Process(target=alives, args=())
             p.daemon = True
             p.start()
             p.join(1)
-            print("Controladors de ALIVE activat")
+
+
+            if options.debug: print(time.strftime('%X:'),"DEBUG =>  Creat fill per gestionar els paquets")
 
             #crear otro daemon para controlar la entrada recvfrom
             p1 = Process(target=entradaPaquet)
             p1.processes = False
             p1.start()
-
-            print("HOLA")
 
             while 1:
                 name = input()
@@ -381,4 +406,4 @@ if __name__ == '__main__':
                     for indexClient in range(len(listaClientes)):
                         print(listaClientes[indexClient].nom,"      ", listaClientes[indexClient].ip, listaClientes[indexClient].mac, listaClientes[indexClient].numAl, listaClientes[indexClient].estat)
                 else:
-                    print("MSG.  =>  Comanda incorrecta")
+                    print(time.strftime('%X:'),"MSG.  =>  Comanda incorrecta")
