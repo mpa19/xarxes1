@@ -20,6 +20,8 @@
 
 #include <stdbool.h>
 
+#include <sys/stat.h>
+
 
 struct PDU {
   unsigned char tipusPaq[1];
@@ -46,7 +48,7 @@ int alive();
 void crearScoketTCP();
 void paqueteSend();
 
-// ---------- Variables globales ---------- //
+/* ---------- Variables globales ---------- */
 time_t raw_time;
 struct tm *ptr_ts;
 struct hostent *ent;
@@ -57,16 +59,15 @@ struct PDU prot;
 struct PDU prot2;
 struct PDUtcp protTCP;
 struct PDUtcp *pduTCP;
-struct PDUtcp *recib;
-struct PDUtcp protTCP2;
-
+struct PDUtcp *recibTCP;
+struct PDUtcp prot2TCP;
 
 struct sockaddr_in	addr_server,addr_cli, addr_serverTCP,addr_cliTCP;
 char *ficheroCfg = "boot.cfg";
 
 bool debug = false;
 char numAlServer[7], nomSever[7], macServer[13];
-// ---------- Final Variables globales ---------- //
+/* ---------- Fin Variables globales ---------- */
 
 void hora(){
   time (&raw_time);
@@ -265,7 +266,6 @@ int alive(){
 
 /* ---------- Creacion socket TCP y connect con el server ----------- */
 void crearScoketTCP(){
-  printf("T");
   sockTCP=socket(AF_INET,SOCK_STREAM,0);
 	if(sockTCP<0)
 	{
@@ -286,30 +286,95 @@ void crearScoketTCP(){
               fprintf(stderr,"Error al connect\n");
               exit(-2);
           }
+  printf("%2d:%02d:%02d: MSG.  =>  Sol·licitd d'enviament d'arxiu de configuració al servidor (%s)\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, ficheroCfg);
+
 }
 /* ---------- Fin Creacion socket TCP y cconnect con el server ----------- */
 
 /* ---------- Gestionar paquete send ---------- */
 void paqueteSend(){
-  /*struct timeval tv;
+  struct timeval tv;
   int select_return;
   fd_set fdread;
+  struct stat st;
+  char nom[40];
+  char size[10];
 
+  stat(ficheroCfg, &st);
+  sprintf(size, "%ld", st.st_size);
+
+  recibTCP = &prot2TCP;
+  FD_ZERO(&fdread);
+  FD_SET(sockTCP, &fdread);
   tv.tv_sec = 4;
-  tv.tv_usec = 0;*/
+  tv.tv_usec = 0;
   protTCP.tipusPaq[0] = 0x20;
   strcpy(protTCP.nomEquip, prot.nomEquip);
   strcpy(protTCP.MAC, prot.MAC);
   strcpy(protTCP.dades, ficheroCfg);
+  strcat(protTCP.dades, ",");
+  strcat(protTCP.dades, size);
+
   pduTCP = &protTCP;
   strcpy(pduTCP->numAleatori, pdu->numAleatori);
-  write(sockTCP,pduTCP, sizeof(struct PDUtcp));
-  //select_return = select(sockTCP+1,&fdread, NULL, NULL, &tv);
 
+  if(debug){
+    hora();
+    printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=SEND_FILE, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), pduTCP->nomEquip, pduTCP->MAC, pduTCP->numAleatori, pduTCP->dades);
+  }
+  write(sockTCP, pduTCP, sizeof(struct PDUtcp));
+  select_return = select(sockTCP+1,&fdread, NULL, NULL, &tv);
 
-  /*if(strcmp(recib->nomEquip, nomSever) == 0 &&
-      strcmp(recib->MAC, macServer) == 0 &&
-      strcmp(recib->numAleatori, numAlServer) == 0)*/
+  if(select_return){
+    read(sockTCP,recibTCP,sizeof(struct PDUtcp));
+
+    if(recibTCP->tipusPaq[0] == 0x21) {
+      strcat(nom, pduTCP->nomEquip);
+      strcat(nom, ".cfg");
+
+      if(debug){
+        hora();
+        printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=SEND_ACK, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), recibTCP->nomEquip, recibTCP->MAC, recibTCP->numAleatori, recibTCP->dades);
+      }
+
+      if(strcmp(recibTCP->nomEquip, nomSever) == 0 &&
+          strcmp(recibTCP->MAC, macServer) == 0 &&
+          strcmp(recibTCP->numAleatori, numAlServer) == 0 &&
+          strcmp(recibTCP->dades, nom) == 0){
+            char linea[150];
+            FILE *fich;
+            pduTCP->tipusPaq[0] = 0x24;
+            fich = fopen(ficheroCfg, "r");
+            while (fgets(linea, 150, (FILE*) fich)) {
+              strcpy(pduTCP->dades, linea);
+              write(sockTCP, pduTCP, sizeof(struct PDUtcp));
+              if(debug){
+                hora();
+                printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=SEND_DATA, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), pduTCP->nomEquip, pduTCP->MAC, pduTCP->numAleatori, pduTCP->dades);
+              }
+            }
+            fclose(fich);
+            pduTCP->tipusPaq[0] = 0x25;
+            strcpy(pduTCP->dades, "");
+            write(sockTCP, pduTCP, sizeof(struct PDUtcp));
+            if(debug){
+              hora();
+              printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=SEND_END, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), pduTCP->nomEquip, pduTCP->MAC, pduTCP->numAleatori, pduTCP->dades);
+            }
+      }
+      if(debug){
+        hora();
+        printf("%2d:%02d:%02d: INFO  =>  Error recepció paquet TCP. Servidor incorrecte (correcte: nom=%s, ip=%s, mac=%s, alea=%s))\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, nomSever, inet_ntoa(*((struct in_addr*)ent->h_addr_list[0])), macServer, numAlServer);
+      }
+    }else {
+      if(debug){
+        hora();
+        if(recibTCP->tipusPaq[0] == 0x22) printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=SEND_NACK, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), recibTCP->nomEquip, recibTCP->MAC, recibTCP->numAleatori, recibTCP->dades);
+        else if(recibTCP->tipusPaq[0] == 0x23) printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=SEND_REJ, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), recibTCP->nomEquip, recibTCP->MAC, recibTCP->numAleatori, recibTCP->dades);
+      }
+    }
+  }
+  close(sockTCP);
 }
 /* ---------- Fin Gestionar paquete send ---------- */
 
@@ -320,13 +385,16 @@ int main(int argc,char *argv[])
   int opt;
   char *fichero = "client.cfg";
 
-  while((opt = getopt(argc, argv, ":c:d")) != -1){
+  while((opt = getopt(argc, argv, ":c:f:d")) != -1){
     switch(opt){
       case 'c':
         fichero = optarg;
         break;
       case 'd':
         debug = true;
+        break;
+      case 'f':
+        ficheroCfg = optarg;
         break;
       }
     }
@@ -433,9 +501,7 @@ int main(int argc,char *argv[])
           fgets(line, sizeof(line), stdin);
           if(strcmp(line, "quit\n") == 0) exit(0);
           else if(strcmp(line, "send-conf\n") == 0){
-            printf("WTF");
             crearScoketTCP();
-            printf("B");
             paqueteSend();
           } else printf("%2d:%02d:%02d: MSG.  =>  Comanda incorrecta\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
         }
