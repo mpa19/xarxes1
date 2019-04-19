@@ -451,9 +451,9 @@ int main(int argc,char *argv[])
   pid_t pid, pid2, pidFinal;
 
   mostraMSG("DISCONNECTED", "Equip");
-  strcpy(prot.numAleatori, "000000");
 
   regis:
+  strcpy(prot.numAleatori, "000000");
   reg = registrar();
 
   if(reg == 1){
