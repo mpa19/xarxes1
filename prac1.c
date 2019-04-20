@@ -158,7 +158,7 @@ int registrar(){
       hora();
       printf("%2d:%02d:%02d: INFO  =>  Fallida registre amb servidor: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, ent->h_name);
     }
-    sleep(5);
+    sleep(6);
     procesos++;
   }
   return 0;
@@ -297,7 +297,6 @@ void paqueteSend(){
   int select_return;
   fd_set fdread;
   struct stat st;
-  char nom[40];
   char size[10];
 
   stat(ficheroCfg, &st);
@@ -329,8 +328,6 @@ void paqueteSend(){
     read(sockTCP,recibTCP,sizeof(struct PDUtcp));
 
     if(recibTCP->tipusPaq[0] == 0x21) {
-      strcat(nom, pduTCP->nomEquip);
-      strcat(nom, ".cfg");
 
       if(debug){
         hora();
@@ -339,12 +336,13 @@ void paqueteSend(){
 
       if(strcmp(recibTCP->nomEquip, nomSever) == 0 &&
           strcmp(recibTCP->MAC, macServer) == 0 &&
-          strcmp(recibTCP->numAleatori, numAlServer) == 0 &&
-          strcmp(recibTCP->dades, nom) == 0){
+          strcmp(recibTCP->numAleatori, numAlServer) == 0) {
+
             char linea[150];
             FILE *fich;
             pduTCP->tipusPaq[0] = 0x24;
             fich = fopen(ficheroCfg, "r");
+
             while (fgets(linea, 150, (FILE*) fich)) {
               strcpy(pduTCP->dades, linea);
               write(sockTCP, pduTCP, sizeof(struct PDUtcp));
@@ -353,18 +351,23 @@ void paqueteSend(){
                 printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=SEND_DATA, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), pduTCP->nomEquip, pduTCP->MAC, pduTCP->numAleatori, pduTCP->dades);
               }
             }
+
             fclose(fich);
             pduTCP->tipusPaq[0] = 0x25;
             strcpy(pduTCP->dades, "");
             write(sockTCP, pduTCP, sizeof(struct PDUtcp));
+
             if(debug){
               hora();
               printf("%2d:%02d:%02d: DEBUG =>  Enviat: bytes=%li, comanda=SEND_END, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), pduTCP->nomEquip, pduTCP->MAC, pduTCP->numAleatori, pduTCP->dades);
             }
-      }
-      if(debug){
-        hora();
-        printf("%2d:%02d:%02d: INFO  =>  Error recepció paquet TCP. Servidor incorrecte (correcte: nom=%s, ip=%s, mac=%s, alea=%s))\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, nomSever, inet_ntoa(*((struct in_addr*)ent->h_addr_list[0])), macServer, numAlServer);
+            printf("%2d:%02d:%02d: MSG.  =>  Finalitzat enviament d'arxiu de configuració al servidor (%s)\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,ficheroCfg);
+
+      } else {
+        if(debug){
+          hora();
+          printf("%2d:%02d:%02d: INFO  =>  Error recepció paquet TCP. Servidor incorrecte (correcte: nom=%s, ip=%s, mac=%s, alea=%s))\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, nomSever, inet_ntoa(*((struct in_addr*)ent->h_addr_list[0])), macServer, numAlServer);
+        }
       }
     }else {
       if(debug){
@@ -372,6 +375,11 @@ void paqueteSend(){
         if(recibTCP->tipusPaq[0] == 0x22) printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=SEND_NACK, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), recibTCP->nomEquip, recibTCP->MAC, recibTCP->numAleatori, recibTCP->dades);
         else if(recibTCP->tipusPaq[0] == 0x23) printf("%2d:%02d:%02d: DEBUG =>  Rebut: bytes=%li, comanda=SEND_REJ, nom=%s, mac=%s, alea=%s  dades=%s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec,sizeof(struct PDUtcp), recibTCP->nomEquip, recibTCP->MAC, recibTCP->numAleatori, recibTCP->dades);
       }
+    }
+  } else {
+    if(debug){
+      hora();
+      printf("%2d:%02d:%02d: ALERT =>  No s'ha rebut informació per el canal TCP durant 4 segons)\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
     }
   }
   close(sockTCP);
