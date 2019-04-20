@@ -47,6 +47,8 @@ void leerConfig(char*);
 int alive();
 void crearScoketTCP();
 void paqueteSend();
+void crearScoketUDP();
+void controlarComandas();
 
 /* ---------- Variables globales ---------- */
 time_t raw_time;
@@ -91,6 +93,37 @@ char* tPaquet(struct PDU *pdu){
   return "";
 }
 
+/* ------------ crearScoketUDP ------------ */
+void crearScoketUDP(){
+  /* Crea un socket INET+DGRAM -> UDP */
+	sock=socket(AF_INET,SOCK_DGRAM,0);
+	if(sock<0)
+	{
+		fprintf(stderr,"No puc obrir socket!!!\n");
+		exit(-1);
+	}
+
+	/* Ompla l'estructrura d'adreça amb les adreces on farem el binding (acceptem
+	   per qualsevol adreça local */
+	memset(&addr_cli,0,sizeof (struct sockaddr_in));
+	addr_cli.sin_family=AF_INET;
+	addr_cli.sin_addr.s_addr=htonl(INADDR_ANY);
+	addr_cli.sin_port=htons(0);
+
+	/* Fem el binding */
+	if(bind(sock,(struct sockaddr *)&addr_cli,sizeof(struct sockaddr_in))<0)
+	{
+		fprintf(stderr,"No puc fer el binding del socket!!!\n");
+                exit(-2);
+	}
+
+	/* Ompla l'estructrura d'adreça amb l'adreça del servidor on enviem les dades */
+	memset(&addr_server,0,sizeof (struct sockaddr_in));
+	addr_server.sin_family=AF_INET;
+  addr_server.sin_addr.s_addr=INADDR_ANY;
+	addr_server.sin_port=htons(port);
+}
+/* ------------ Fin crearScoketUDP ------------ */
 
 /* ----------- Enviar paquetes registrar ----------- */
 int registrar(){
@@ -386,6 +419,21 @@ void paqueteSend(){
 }
 /* ---------- Fin Gestionar paquete send ---------- */
 
+/* ---------- controlarComandas ------------------- */
+void controlarComandas(){
+  while(1){
+    char line[4096];
+
+    fgets(line, sizeof(line), stdin);
+    if(strcmp(line, "quit\n") == 0) exit(0);
+    else if(strcmp(line, "send-conf\n") == 0){
+      crearScoketTCP();
+      paqueteSend();
+    } else printf("%2d:%02d:%02d: MSG.  =>  Comanda incorrecta\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
+  }
+}
+/* ---------- Fin controlarComandas ------------------- */
+
 /* ---------- Funcion Main del cliente ------------ */
 int main(int argc,char *argv[])
 {
@@ -420,34 +468,7 @@ int main(int argc,char *argv[])
     printf("%2d:%02d:%02d: DEBUG =>  Llegits parametres arxius de configuració\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
   }
 
-	/* Crea un socket INET+DGRAM -> UDP */
-	sock=socket(AF_INET,SOCK_DGRAM,0);
-	if(sock<0)
-	{
-		fprintf(stderr,"No puc obrir socket!!!\n");
-		perror(argv[0]);
-		exit(-1);
-	}
-
-	/* Ompla l'estructrura d'adreça amb les adreces on farem el binding (acceptem
-	   per qualsevol adreça local */
-	memset(&addr_cli,0,sizeof (struct sockaddr_in));
-	addr_cli.sin_family=AF_INET;
-	addr_cli.sin_addr.s_addr=htonl(INADDR_ANY);
-	addr_cli.sin_port=htons(0);
-
-	/* Fem el binding */
-	if(bind(sock,(struct sockaddr *)&addr_cli,sizeof(struct sockaddr_in))<0)
-	{
-		fprintf(stderr,"No puc fer el binding del socket!!!\n");
-                exit(-2);
-	}
-
-	/* Ompla l'estructrura d'adreça amb l'adreça del servidor on enviem les dades */
-	memset(&addr_server,0,sizeof (struct sockaddr_in));
-	addr_server.sin_family=AF_INET;
-  addr_server.sin_addr.s_addr=INADDR_ANY;
-	addr_server.sin_port=htons(port);
+	crearScoketUDP();
 
 
   if(debug){
@@ -503,16 +524,7 @@ int main(int argc,char *argv[])
         } else goto esperar;
       } else {
         // Fill 2, Controla la entrada de comandes per consola
-        while(1){
-          char line[4096];
-
-          fgets(line, sizeof(line), stdin);
-          if(strcmp(line, "quit\n") == 0) exit(0);
-          else if(strcmp(line, "send-conf\n") == 0){
-            crearScoketTCP();
-            paqueteSend();
-          } else printf("%2d:%02d:%02d: MSG.  =>  Comanda incorrecta\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec);
-        }
+        controlarComandas();
 
       }
 
