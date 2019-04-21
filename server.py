@@ -224,7 +224,7 @@ def comprobar_estado(tipo, index):
     """ Mirar que tipo de paquete a entrado y en que estado deberia estar
         depende del estado y el paquete pasara a estar en otro estado o no """
 
-    global LISTA_CLIENTES, DATA, CLIENTS_ALIVE, TIME_ALIVE, TIME_PRIMER_ALIVE, CLIENTS_REGISTERED
+    global LISTA_CLIENTES, DATA, CLIENTS_ALIVE, TIME_ALIVE
 
     index_client = buscar_index_cliente(index, 3)
 
@@ -235,8 +235,8 @@ def comprobar_estado(tipo, index):
 
             if LISTA_CLIENTES[index_client].estat == "DISCONNECTED" and \
                 num_aleatori.decode('utf-8') == "000000":
-                TIME_PRIMER_ALIVE.append(7)
-                CLIENTS_REGISTERED.append(LISTA_CLIENTES[index_client].nom)
+                TIME_ALIVE.append(7)
+                CLIENTS_ALIVE.append(LISTA_CLIENTES[index_client].nom)
                 return index_client
 
             # Enviar paquete de suplantacion de identidad
@@ -248,11 +248,8 @@ def comprobar_estado(tipo, index):
             if LISTA_CLIENTES[index_client].estat == "REGISTERED":
 
                 if comprobar_alive(index_client, index):
-                    index_primer_alive = CLIENTS_REGISTERED.index(LISTA_CLIENTES[index_client].nom)
-                    TIME_PRIMER_ALIVE.pop(index_primer_alive)
-                    CLIENTS_REGISTERED.pop(index_primer_alive)
-                    CLIENTS_ALIVE.append(LISTA_CLIENTES[index_client].nom)
-                    TIME_ALIVE.append(10)
+                    index_alive = CLIENTS_ALIVE.index(LISTA_CLIENTES[index_client].nom)
+                    TIME_ALIVE[index_alive] = 10
                     cliente = LISTA_CLIENTES[index_client]
                     cliente.estat = "ALIVE"
                     LISTA_CLIENTES.pop(index_client)
@@ -521,15 +518,12 @@ def buscar_index_cliente(index, donde):
     Encuentra el index del cliente en la lista de los clientes autorizados
     """
 
-    global CLIENTS_ALIVE, CLIENTS_REGISTERED, LISTA_CLIENTES, DATA
+    global CLIENTS_ALIVE, LISTA_CLIENTES, DATA
     for index_client in range(len(LISTA_CLIENTES)):
         if donde == 0:
             if LISTA_CLIENTES[index_client].nom == CLIENTS_ALIVE[index]:
                 return int(index_client)
 
-        elif donde == 1:
-            if LISTA_CLIENTES[index_client].nom == CLIENTS_REGISTERED[index]:
-                return int(index_client)
         else:
             nom = DATA[index][1].split(b'\0', 1)[0]
 
@@ -545,7 +539,7 @@ def alives():
     Controlador de los Alive, tanto los primeros como los demas
     """
 
-    global CLIENTS_ALIVE, TIME_ALIVE, LISTA_CLIENTES, TIME_PRIMER_ALIVE, CLIENTS_REGISTERED
+    global CLIENTS_ALIVE, TIME_ALIVE, LISTA_CLIENTES
     if OPTIONS.debug:
         print(time.strftime('%X:'), "INFO  =>  Establert temporitzador per control alives")
 
@@ -567,22 +561,6 @@ def alives():
                 print(time.strftime('%X:'), \
                     "MSG.  =>  Equip", cliente.nom, "passa a estat: DISCONNECTED")
 
-        # Controlem els primers ALIVES
-        for cont, val in enumerate(TIME_PRIMER_ALIVE):
-            TIME_PRIMER_ALIVE[cont] -= 1
-            if TIME_PRIMER_ALIVE[cont] == 0:
-                index_client = buscar_index_cliente(cont, 1)
-                cliente = LISTA_CLIENTES[index_client]
-                cliente.ip = "        -"
-                cliente.num_ale = "     -"
-                cliente.estat = "DISCONNECTED"
-                LISTA_CLIENTES.pop(index_client)
-                LISTA_CLIENTES.insert(index_client, cliente)
-                TIME_PRIMER_ALIVE.pop(cont)
-                CLIENTS_REGISTERED.pop(cont)
-
-                print(time.strftime('%X:'), \
-                    "MSG.  =>  Equip", cliente.nom, "passa a estat: DISCONNECTED")
         time.sleep(1)
 # ---------------------- Fin alive ------------------ #
 
@@ -603,8 +581,6 @@ if __name__ == '__main__':
         CLIENTS_ALIVE = manager.list()
         TIME_ALIVE = manager.list()
         LISTA_CLIENTES = manager.list()
-        CLIENTS_REGISTERED = manager.list()
-        TIME_PRIMER_ALIVE = manager.list()
 
         leer_config()
         setup()
