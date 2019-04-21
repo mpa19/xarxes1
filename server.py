@@ -533,7 +533,7 @@ def buscar_index_cliente(index, donde):
     return None
 # ---------------------- Fin buscar_index_cliente ------------------ #
 
-# ---------- Funcion Alive -------- #
+# ---------- Funcion alives -------- #
 def alives():
     """
     Controlador de los Alive, tanto los primeros como los demas
@@ -561,14 +561,14 @@ def alives():
                 print(time.strftime('%X:'), \
                     "MSG.  =>  Equip", cliente.nom, "passa a estat: DISCONNECTED")
         time.sleep(1)
-# ---------------------- Fin alive ------------------ #
+# ---------------------- Fin alives ------------------ #
 
-# --------------- controlar_comandas ---------------- #
+# --------------- Funcion controlar_comandas ---------------- #
 def controlar_comandas():
     """
     Controla las comandas introducidas por teclado
     """
-    
+
     while 1:
         NAME = input()
         if NAME == 'quit':
@@ -584,7 +584,7 @@ def controlar_comandas():
             print(time.strftime('%X:'), "MSG.  =>  Comanda incorrecta")
 # --------------- Fin controlar_comandas ---------------- #
 
-# -------- Funcion Main ------------- #
+# -------- Funcion main ------------- #
 if __name__ == '__main__':
 
     # Opciones de comanda
