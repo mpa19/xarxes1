@@ -560,9 +560,29 @@ def alives():
 
                 print(time.strftime('%X:'), \
                     "MSG.  =>  Equip", cliente.nom, "passa a estat: DISCONNECTED")
-
         time.sleep(1)
 # ---------------------- Fin alive ------------------ #
+
+# --------------- controlar_comandas ---------------- #
+def controlar_comandas():
+    """
+    Controla las comandas introducidas por teclado
+    """
+    
+    while 1:
+        NAME = input()
+        if NAME == 'quit':
+            P1.terminate()
+            sys.exit(0)
+        elif NAME == 'list':
+            print("-NOM-- ------IP------- -----MAC---- -ALEA- ----ESTAT---")
+            for index_client in range(len(LISTA_CLIENTES)):
+                print(LISTA_CLIENTES[index_client].nom, "      ", \
+                    LISTA_CLIENTES[index_client].ip, LISTA_CLIENTES[index_client].mac, \
+                    LISTA_CLIENTES[index_client].num_ale, LISTA_CLIENTES[index_client].estat)
+        else:
+            print(time.strftime('%X:'), "MSG.  =>  Comanda incorrecta")
+# --------------- Fin controlar_comandas ---------------- #
 
 # -------- Funcion Main ------------- #
 if __name__ == '__main__':
@@ -602,16 +622,4 @@ if __name__ == '__main__':
         P1.start()
 
         # Controlador de entrada de comandos por consola
-        while 1:
-            NAME = input()
-            if NAME == 'quit':
-                P1.terminate()
-                sys.exit(0)
-            elif NAME == 'list':
-                print("-NOM-- ------IP------- -----MAC---- -ALEA- ----ESTAT---")
-                for index_client in range(len(LISTA_CLIENTES)):
-                    print(LISTA_CLIENTES[index_client].nom, "      ", \
-                        LISTA_CLIENTES[index_client].ip, LISTA_CLIENTES[index_client].mac, \
-                        LISTA_CLIENTES[index_client].num_ale, LISTA_CLIENTES[index_client].estat)
-            else:
-                print(time.strftime('%X:'), "MSG.  =>  Comanda incorrecta")
+        controlar_comandas()
