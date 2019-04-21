@@ -570,11 +570,11 @@ def controlar_comandas():
     """
 
     while 1:
-        NAME = input()
-        if NAME == 'quit':
+        name = input()
+        if name == 'quit':
             P1.terminate()
             sys.exit(0)
-        elif NAME == 'list':
+        elif name == 'list':
             print("-NOM-- ------IP------- -----MAC---- -ALEA- ----ESTAT---")
             for index_client in range(len(LISTA_CLIENTES)):
                 print(LISTA_CLIENTES[index_client].nom, "      ", \
