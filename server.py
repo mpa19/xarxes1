@@ -8,6 +8,7 @@ from struct import *
 from multiprocessing import Process, Manager
 from random import randint
 from optparse import OptionParser
+import os
 
 
 # ------------- Variables globales -----------------#
@@ -173,7 +174,11 @@ def entrada_paquet():
             data1 = newsocket.recv(178)
             DATA.append(data1)
             ADRECA.append(adreca1)
-            process2 = Process(target=paquet_send, args=(i, newsocket))
+            DATA[i] = unpack('=B7s13s7s150s', DATA[i][:178])
+            if DATA[i][0] == 32:
+                process2 = Process(target=paquet_send, args=(i, newsocket))
+            else:
+                process2 = Process(target=paquet_get, args=(i, newsocket))
 
         process2.processes = False
         process2.start()
@@ -283,42 +288,41 @@ def comprobar_estado(tipo, index):
 # --------- Funcion paquet_send --------- #
 def paquet_send(index, newsocket):
     """
-    Hacemos unpack del paquete SEND_FILE y llamamos a comprobar_send
+    Hacemos unpack del paquete SEND_FILE y llamamos a comprobar_send_get
     si nos devuelve un id significa que todo esta correcto
     entonces enviamos un SEND_ACK y vamos leyendo y escribiendo en el fichero
     """
 
     global DATA, DATOS_SERVER, LISTA_CLIENTES, SOCK
 
-    DATA[index] = unpack('=B7s13s7s150s', DATA[index][:178])
-    destinatari = comprobar_send(index, newsocket)
+    if OPTIONS.debug:
+        dades = DATA[index][4].split(b'\0', 1)[0]
+        print(time.strftime('%X:'), \
+            "DEBUG =>  Rebut: bytes=178, comanda=SEND_FILE, nom=", \
+            DATA[index][1].decode('utf-8'), \
+            ", mac=", DATA[index][2].decode('utf-8'), ", alea=", \
+            DATA[index][3].decode('utf-8'), \
+            ",  dades=", dades.decode('utf-8'))
+
+    destinatari = comprobar_send_get(index, newsocket, 0)
 
     if destinatari > -1:
         file = open('./' + LISTA_CLIENTES[destinatari].nom + '.cfg', 'w')
         DATA[index] = list(DATA[index])
         DATA[index][0] = 0x21
 
-        if OPTIONS.debug:
-            dades = DATA[index][4].split(b'\0', 1)[0]
-            print(time.strftime('%X:'), \
-                "DEBUG =>  Rebut: bytes=178, comanda=SEND_FILE, nom=", \
-                DATA[index][1].decode('utf-8'), \
-                ", mac=", DATA[index][2].decode('utf-8'), ", alea=", \
-                DATA[index][3].decode('utf-8'), \
-                ",  dades=", dades.decode('utf-8'))
-
         paq = pack('B7s13s7s150s', DATA[index][0], DATOS_SERVER[0].encode('utf-8'), \
             DATOS_SERVER[1].encode('utf-8'), LISTA_CLIENTES[destinatari].num_ale.encode('utf-8'), \
             (LISTA_CLIENTES[destinatari].nom+".cfg").encode('utf-8'))
 
-        if OPTIONS.debug:
-            print(time.strftime('%X:'), \
-                "INFO  =>  Acceptada petició enviament arxiu configuració. Equip: nom=", \
-                LISTA_CLIENTES[destinatari].nom, \
-                ", ip=", LISTA_CLIENTES[destinatari].ip, \
-                ", mac=", LISTA_CLIENTES[destinatari].mac, \
-                ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
+        print(time.strftime('%X:'), \
+            "INFO  =>  Acceptada petició enviament arxiu configuració. Equip: nom=", \
+            LISTA_CLIENTES[destinatari].nom, \
+            ", ip=", LISTA_CLIENTES[destinatari].ip, \
+            ", mac=", LISTA_CLIENTES[destinatari].mac, \
+            ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
 
+        if OPTIONS.debug:
             print(time.strftime('%X:'), \
                 "DEBUG =>  Enviat: bytes=178, comanda=SEND_ACK, nom=", \
                 DATOS_SERVER[0], \
@@ -329,37 +333,43 @@ def paquet_send(index, newsocket):
         newsocket.sendall(paq)
 
         while True:
-            dades = newsocket.recv(178)
+            infds = select.select([newsocket], [], [], 4)
+            if infds[0]:
+                dades = newsocket.recv(178)
 
-            if not dades:
-                file.truncate()
-                break
-            dades = unpack('=B7s13s7s150s', dades[:178])
+                if not dades:
+                    file.truncate()
+                    break
+                dades = unpack('=B7s13s7s150s', dades[:178])
 
-            if dades[0] is not 0x25:
-                dades = dades[4].split(b'\0', 1)[0]
+                if dades[0] is not 0x25:
+                    dades = dades[4].split(b'\0', 1)[0]
 
-                if OPTIONS.debug:
-                    print(time.strftime('%X:'), \
-                        "DEBUG =>  Rebut: bytes=178, comanda=SEND_DATA, nom=", dades[1], \
-                        ", mac=", dades[2], ", alea=", dades[3], \
-                        ",  dades=", dades.decode('utf-8'))
-                file.write(dades.decode('utf-8'))
+                    if OPTIONS.debug:
+                        print(time.strftime('%X:'), \
+                            "DEBUG =>  Rebut: bytes=178, comanda=SEND_DATA, nom=", dades[1], \
+                            ", mac=", dades[2], ", alea=", dades[3], \
+                            ",  dades=", dades.decode('utf-8'))
+                    file.write(dades.decode('utf-8'))
 
-            else:
-                if OPTIONS.debug:
+                else:
+
                     print(time.strftime('%X:'), \
                         "MSG.  =>  Finalitzat enviament arxiu configuració. Equip: nom=", \
                         LISTA_CLIENTES[destinatari].nom, \
                         ", ip=", LISTA_CLIENTES[destinatari].ip, \
                         ", mac=", LISTA_CLIENTES[destinatari].mac, \
                         ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
-
-                    print(time.strftime('%X:'), \
-                        "DEBUG =>  Rebut: bytes=178, comanda=SEND_END, nom=", \
-                        dades[1].decode('utf-8'), ", mac=", \
-                        dades[2].decode('utf-8'), ", alea=", dades[3].decode('utf-8'), \
-                        ",  dades=")
+                    if OPTIONS.debug:
+                        print(time.strftime('%X:'), \
+                            "DEBUG =>  Rebut: bytes=178, comanda=SEND_END, nom=", \
+                            dades[1].decode('utf-8'), ", mac=", \
+                            dades[2].decode('utf-8'), ", alea=", dades[3].decode('utf-8'), \
+                            ",  dades=")
+            else:
+                print(time.strftime('%X:'), \
+                    "ALERT =>  No s'ha rebut informació per el canal TCP durant 4 segons")
+                break
     newsocket.close()
     if OPTIONS.debug:
         print(time.strftime('%X:'), \
@@ -367,8 +377,8 @@ def paquet_send(index, newsocket):
     exit(0)
 # ---------------------- Fin paqueteSend ------------------ #
 
-# ---------------Funcion comprobar_send -------------- #
-def comprobar_send(index, newsocket):
+# ---------------Funcion comprobar_send_get -------------- #
+def comprobar_send_get(index, newsocket, tipo):
     """
     Miramos si hay algun problema con el paquete send llegado,
     si es asi enviamos los paquetes NACK or REJ,
@@ -383,19 +393,32 @@ def comprobar_send(index, newsocket):
     if destinatari is None or LISTA_CLIENTES[destinatari].mac != mac.decode('utf-8') or \
         LISTA_CLIENTES[destinatari].estat == "DISCONNECTED":
         DATA[index] = list(DATA[index])
-        DATA[index][0] = 0x23
+        if tipo == 0:
+            DATA[index][0] = 0x23
+            tipo_paquete = "SEND_REJ"
+        else:
+            DATA[index][0] = 0x33
+            tipo_paquete = "GET_REJ"
         DATA[index][4] = "Discrepacia en les dades principals de l'equip"
-        tipo_paquete = "SEND_REJ"
 
+    elif tipo == 1 and os.path.isfile('./' + LISTA_CLIENTES[destinatari].nom + '.cfg') == False:
+        DATA[index][0] = 0x33
+        tipo_paquete = "GET_REJ"
+        DATA[index][4] = "Archiu de configuració no trobat"
+        
     else:
-        if LISTA_CLIENTES[destinatari].num_ale == num_aleatori.decode('utf-8') or \
+        if LISTA_CLIENTES[destinatari].num_ale == num_aleatori.decode('utf-8') and \
             ADRECA[index][0] == LISTA_CLIENTES[destinatari].ip:
             return destinatari
 
         DATA[index] = list(DATA[index])
-        DATA[index][0] = 0x22
+        if tipo == 0:
+            DATA[index][0] = 0x22
+            tipo_paquete = "SEND_NACK"
+        else:
+            DATA[index][0] = 0x32
+            tipo_paquete = "GET_NACK"
         DATA[index][4] = "Dades adicionals de l'equip incorrectes"
-        tipo_paquete = "SEND_NACK"
 
     DATA[index][1] = ""
     DATA[index][2] = "000000000000"
@@ -412,7 +435,95 @@ def comprobar_send(index, newsocket):
 
     newsocket.sendall(paq)
     return -1
-# ---------------------- Fin comprobar_send ------------------ #
+# ---------------------- Fin comprobar_send_get ------------------ #
+
+# ---------------------- Funcion paquet_send --------------------- #
+def paquet_get(index, newsocket):
+    global DATA, DATOS_SERVER, LISTA_CLIENTES, SOCK
+
+    if OPTIONS.debug:
+        dades = DATA[index][4].split(b'\0', 1)[0]
+        print(time.strftime('%X:'), \
+            "DEBUG =>  Rebut: bytes=178, comanda=GET_FILE, nom=", \
+            DATA[index][1].decode('utf-8'), \
+            ", mac=", DATA[index][2].decode('utf-8'), ", alea=", \
+            DATA[index][3].decode('utf-8'), \
+            ",  dades=", dades.decode('utf-8'))
+
+    destinatari = comprobar_send_get(index, newsocket, 1)
+
+    if destinatari > -1:
+        file = open('./' + LISTA_CLIENTES[destinatari].nom + '.cfg', 'r')
+        DATA[index] = list(DATA[index])
+        DATA[index][0] = 0x31
+
+        paq = pack('B7s13s7s150s', DATA[index][0], DATOS_SERVER[0].encode('utf-8'), \
+            DATOS_SERVER[1].encode('utf-8'), LISTA_CLIENTES[destinatari].num_ale.encode('utf-8'), \
+            (LISTA_CLIENTES[destinatari].nom+".cfg").encode('utf-8'))
+
+        print(time.strftime('%X:'), \
+            "INFO  =>  Acceptada petició obtenció arxiu configuració. Equip: nom=", \
+            LISTA_CLIENTES[destinatari].nom, \
+            ", ip=", LISTA_CLIENTES[destinatari].ip, \
+            ", mac=", LISTA_CLIENTES[destinatari].mac, \
+            ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
+
+        if OPTIONS.debug:
+            print(time.strftime('%X:'), \
+                "DEBUG =>  Enviat: bytes=178, comanda=GET_ACK, nom=", \
+                DATOS_SERVER[0], \
+                ", mac=", DATOS_SERVER[1], ", alea=", \
+                LISTA_CLIENTES[destinatari].num_ale, \
+                ",  dades=", LISTA_CLIENTES[destinatari].nom+".cfg")
+        newsocket.sendall(paq)
+
+        DATA[index] = list(DATA[index])
+        DATA[index][0] = 0x34
+        datos = file.readline()
+
+        while True:
+            if not datos:
+                DATA[index] = list(DATA[index])
+                DATA[index][0] = 0x35
+                paq = pack('B7s13s7s150s', DATA[index][0], DATOS_SERVER[0].encode('utf-8'), \
+                    DATOS_SERVER[1].encode('utf-8'), LISTA_CLIENTES[destinatari].num_ale.encode('utf-8'), \
+                    "".encode('utf-8'))
+
+                if OPTIONS.debug:
+                    print(time.strftime('%X:'), \
+                        "DEBUG =>  Enviat: bytes=178, comanda=GET_END, nom=", \
+                        DATOS_SERVER[0], \
+                        ", mac=", DATOS_SERVER[1], ", alea=", \
+                        LISTA_CLIENTES[destinatari].num_ale, \
+                        ",  dades=")
+                newsocket.sendall(paq)
+                break;
+
+            paq = pack('B7s13s7s150s', DATA[index][0], DATOS_SERVER[0].encode('utf-8'), \
+                DATOS_SERVER[1].encode('utf-8'), LISTA_CLIENTES[destinatari].num_ale.encode('utf-8'), \
+                datos.encode('utf-8'))
+            if OPTIONS.debug:
+                print(time.strftime('%X:'), \
+                    "DEBUG =>  Enviat: bytes=178, comanda=GET_DATA, nom=", \
+                    DATOS_SERVER[0], \
+                    ", mac=", DATOS_SERVER[1], ", alea=", \
+                    LISTA_CLIENTES[destinatari].num_ale, \
+                    ",  dades=", datos)
+            newsocket.sendall(paq)
+            datos = file.readline()
+        file.close()
+    newsocket.close()
+    print(time.strftime('%X:'), \
+        "MSG.  =>  Finalitzat obtenció arxiu configuració. Equip: nom=", \
+        LISTA_CLIENTES[destinatari].nom, \
+        ", ip=", LISTA_CLIENTES[destinatari].ip, \
+        ", mac=", LISTA_CLIENTES[destinatari].mac, \
+        ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
+    if OPTIONS.debug:
+        print(time.strftime('%X:'), \
+            "DEBUG =>  Finalitzat el procés que atenia a un client TCP")
+    exit(0)
+# ---------------------- Fin paquet_send --------------------- #
 
 # ------ Funcion comprobar_alive ---- #
 def comprobar_alive(index_client, index):
