@@ -402,10 +402,11 @@ def comprobar_send_get(index, newsocket, tipo):
         DATA[index][4] = "Discrepacia en les dades principals de l'equip"
 
     elif tipo == 1 and os.path.isfile('./' + LISTA_CLIENTES[destinatari].nom + '.cfg') == False:
+        DATA[index] = list(DATA[index])
         DATA[index][0] = 0x33
         tipo_paquete = "GET_REJ"
-        DATA[index][4] = "Archiu de configuració no trobat"
-        
+        DATA[index][4] = "Arxiu de configuració no trobat"
+
     else:
         if LISTA_CLIENTES[destinatari].num_ale == num_aleatori.decode('utf-8') and \
             ADRECA[index][0] == LISTA_CLIENTES[destinatari].ip:
