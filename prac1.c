@@ -284,7 +284,7 @@ int alive(){
           hora();
           printf("%2d:%02d:%02d: INFO =>  Recepció d'informació de alive rebutjada, motiu: %s\n", ptr_ts->tm_hour,ptr_ts->tm_min,ptr_ts->tm_sec, recib->dades);
         }
-        return 0;
+        return 1;
       } else perduts++;
     } else perduts++;
     if(perduts == 3) {
@@ -642,6 +642,9 @@ int main(int argc,char *argv[])
 
       if(ret == 0) {
         mostraMSG("DISCONNECTED (Sense resposta a 3 ALIVES)", "Equip");
+        exit(0);
+      } else if(ret == 1){
+        mostraMSG("DISCONNECTED (Rebutjat ALIVE)", "Equip");
         exit(0);
       }
     }
