@@ -97,59 +97,39 @@ def leer_config():
         print(time.strftime('%X:'), "DEBUG =>  Llegits paràmetres arxiu de configuració")
 # ---------------------- Fin leer_config ------------------ #
 
-# -------- Funcion random_number -------------#
-def random_number():
-    """
-    Crea un numero random que no este ya assignado a un cliente
-    """
-    global LISTA_CLIENTES
-    num_invalido = False
+# -------------- Funcion mirar_tipo_paquete ------- #
+def mirar_tipo_paquete(tipus):
+    if tipus == 0x02:
+        return "REGISTER_NACK"
+    elif tipus == 0x03:
+        return "REGISTER_REJ"
+    elif tipus == 0x12:
+        return "ALIVE_NACK"
+    elif tipus == 0x13:
+        return "ALIVE_REJ"
+    return ""
+# -------------- Fin mirar_tipo_paquete ------- #
 
-    while 1:
-        value = randint(100000, 999999)
-        for index_client in range(len(LISTA_CLIENTES)):
-            if LISTA_CLIENTES[index_client].num_ale == str(value):
-                num_invalido = True
-
-        if num_invalido is False:
-            return str(value)
-# ---------------------- Fin random_number ------------------ #
-
-# --------- Funcion registro --------- #
-def registro(index_client, index):
+# ------ Funcion buscar_index_cliente --------- #
+def buscar_index_cliente(index, donde):
     """
-    Cambia el estado del cliente a REGISTERED y envia
-    el paquete REGISTER_ACK con la información del servidor y el puerto TCP
+    Encuentra el index del cliente en la lista de los clientes autorizados
     """
 
-    global ADRECA, DATOS_SERVER, SOCK, DATA, DATOS_CLIENT, LISTA_CLIENTES
+    global CLIENTS_ALIVE, LISTA_CLIENTES, DATA
+    for index_client in range(len(LISTA_CLIENTES)):
+        if donde == 0:
+            if LISTA_CLIENTES[index_client].nom == CLIENTS_ALIVE[index]:
+                return int(index_client)
 
-    DATA[index] = list(DATA[index])
-    DATA[index][0] = 0x01
-    random = random_number()
-    paq = pack('B7s13s7s50s', DATA[index][0], DATOS_SERVER[0].encode('utf-8'), \
-        DATOS_SERVER[1].encode('utf-8'), random.encode('utf-8'), DATOS_SERVER[3].encode('utf-8'))
+        else:
+            nom = DATA[index][1].split(b'\0', 1)[0]
 
-    cliente = LISTA_CLIENTES[index_client]
-    cliente.estat = "REGISTERED"
-    cliente.num_ale = random
-    cliente.ip = ADRECA[index][0]
-    LISTA_CLIENTES.pop(index_client)
-    LISTA_CLIENTES.insert(index_client, cliente)
-    print(time.strftime('%X:'), "MSG.  =>  Equip", cliente.nom, "passa a estat: REGISTERED")
+            if LISTA_CLIENTES[index_client].nom == nom.decode('utf-8'):
+                return index_client
 
-    SOCK[0].sendto(paq, ADRECA[index])
-
-    if OPTIONS.debug:
-        print(time.strftime('%X:'), \
-            "INFO  =>  Acceptat registre. Equip: nom=", cliente.nom, \
-            ", ip=", cliente.ip, ", mac=", cliente.mac, \
-            ",  alea=", cliente.num_ale)
-        print(time.strftime('%X:'), \
-            "DEBUG =>  Enviat: bytes=78, comanda=REGISTER_ACK, nom=", DATOS_SERVER[0], \
-            ", mac=", DATOS_SERVER[1], ", alea=", LISTA_CLIENTES[index_client].num_ale, \
-            ",  dades=", DATOS_SERVER[3])
-# ---------------------- Fin registro ------------------ #
+    return None
+# ---------------------- Fin buscar_index_cliente ------------------ #
 
 # --------- Funcion entrada_paquet  ------------ #
 def entrada_paquet():
@@ -284,6 +264,60 @@ def comprobar_estado(tipo, index):
         enviar_paquete_error(index, "Equip no autoritzat en el sistema", 0x03)
         return None
 # ---------------------- Fin comprobar_estado ------------------ #
+
+# -------- Funcion random_number -------------#
+def random_number():
+    """
+    Crea un numero random que no este ya assignado a un cliente
+    """
+    global LISTA_CLIENTES
+    num_invalido = False
+
+    while 1:
+        value = randint(100000, 999999)
+        for index_client in range(len(LISTA_CLIENTES)):
+            if LISTA_CLIENTES[index_client].num_ale == str(value):
+                num_invalido = True
+
+        if num_invalido is False:
+            return str(value)
+# ---------------------- Fin random_number ------------------ #
+
+# --------- Funcion registro --------- #
+def registro(index_client, index):
+    """
+    Cambia el estado del cliente a REGISTERED y envia
+    el paquete REGISTER_ACK con la información del servidor y el puerto TCP
+    """
+
+    global ADRECA, DATOS_SERVER, SOCK, DATA, DATOS_CLIENT, LISTA_CLIENTES
+
+    DATA[index] = list(DATA[index])
+    DATA[index][0] = 0x01
+    random = random_number()
+    paq = pack('B7s13s7s50s', DATA[index][0], DATOS_SERVER[0].encode('utf-8'), \
+        DATOS_SERVER[1].encode('utf-8'), random.encode('utf-8'), DATOS_SERVER[3].encode('utf-8'))
+
+    cliente = LISTA_CLIENTES[index_client]
+    cliente.estat = "REGISTERED"
+    cliente.num_ale = random
+    cliente.ip = ADRECA[index][0]
+    LISTA_CLIENTES.pop(index_client)
+    LISTA_CLIENTES.insert(index_client, cliente)
+    print(time.strftime('%X:'), "MSG.  =>  Equip", cliente.nom, "passa a estat: REGISTERED")
+
+    SOCK[0].sendto(paq, ADRECA[index])
+
+    if OPTIONS.debug:
+        print(time.strftime('%X:'), \
+            "INFO  =>  Acceptat registre. Equip: nom=", cliente.nom, \
+            ", ip=", cliente.ip, ", mac=", cliente.mac, \
+            ",  alea=", cliente.num_ale)
+        print(time.strftime('%X:'), \
+            "DEBUG =>  Enviat: bytes=78, comanda=REGISTER_ACK, nom=", DATOS_SERVER[0], \
+            ", mac=", DATOS_SERVER[1], ", alea=", LISTA_CLIENTES[index_client].num_ale, \
+            ",  dades=", DATOS_SERVER[3])
+# ---------------------- Fin registro ------------------ #
 
 # --------- Funcion paquet_send --------- #
 def paquet_send(index, newsocket):
@@ -513,13 +547,14 @@ def paquet_get(index, newsocket):
             newsocket.sendall(paq)
             datos = file.readline()
         file.close()
+        print(time.strftime('%X:'), \
+            "MSG.  =>  Finalitzat obtenció arxiu configuració. Equip: nom=", \
+            LISTA_CLIENTES[destinatari].nom, \
+            ", ip=", LISTA_CLIENTES[destinatari].ip, \
+            ", mac=", LISTA_CLIENTES[destinatari].mac, \
+            ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
     newsocket.close()
-    print(time.strftime('%X:'), \
-        "MSG.  =>  Finalitzat obtenció arxiu configuració. Equip: nom=", \
-        LISTA_CLIENTES[destinatari].nom, \
-        ", ip=", LISTA_CLIENTES[destinatari].ip, \
-        ", mac=", LISTA_CLIENTES[destinatari].mac, \
-        ",  alea=", LISTA_CLIENTES[destinatari].num_ale)
+
     if OPTIONS.debug:
         print(time.strftime('%X:'), \
             "DEBUG =>  Finalitzat el procés que atenia a un client TCP")
@@ -550,19 +585,6 @@ def comprobar_alive(index_client, index):
     enviar_paquete_error(index, "Error en dades de l'equip", 0x12)
     return False
 # ---------------------- Fin comprobar_alive ------------------ #
-
-# -------------- Funcion mirar_tipo_paquete ------- #
-def mirar_tipo_paquete(tipus):
-    if tipus == 0x02:
-        return "REGISTER_NACK"
-    elif tipus == 0x03:
-        return "REGISTER_REJ"
-    elif tipus == 0x12:
-        return "ALIVE_NACK"
-    elif tipus == 0x13:
-        return "ALIVE_REJ"
-    return ""
-# -------------- Fin mirar_tipo_paquete ------- #
 
 # ------- Funcion enviar_paquete_error -------- #
 def enviar_paquete_error(index, msg, tipus):
@@ -623,27 +645,6 @@ def enviar_alive(destinatari, index):
             ",  dades=")
     exit(0)
 # ---------------------- Fin enviar_alive ------------------ #
-
-# ------ Funcion buscar_index_cliente --------- #
-def buscar_index_cliente(index, donde):
-    """
-    Encuentra el index del cliente en la lista de los clientes autorizados
-    """
-
-    global CLIENTS_ALIVE, LISTA_CLIENTES, DATA
-    for index_client in range(len(LISTA_CLIENTES)):
-        if donde == 0:
-            if LISTA_CLIENTES[index_client].nom == CLIENTS_ALIVE[index]:
-                return int(index_client)
-
-        else:
-            nom = DATA[index][1].split(b'\0', 1)[0]
-
-            if LISTA_CLIENTES[index_client].nom == nom.decode('utf-8'):
-                return index_client
-
-    return None
-# ---------------------- Fin buscar_index_cliente ------------------ #
 
 # ---------- Funcion alives -------- #
 def alives():
